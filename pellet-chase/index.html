@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pellet Chase — Modern Pac-Man Remake</title>
+    <meta name="description" content="A modern remake of Pac-Man (Namco 1980). Maze, four ghosts with personalities, power pellets, fruit bonuses.">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=Inter:wght@400;600;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="../assets/css/game-shell.css">
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="scanlines" aria-hidden="true"></div>
+
+    <div class="game-shell">
+        <header class="game-header">
+            <a href="../" class="back-link">&larr; ARCADE</a>
+            <h1 class="title">PELLET <span class="title-accent">CHASE</span></h1>
+            <div class="subtitle">A modern remake of Pac-Man (Namco 1980)</div>
+        </header>
+
+        <div class="game-frame">
+            <canvas id="game" width="608" height="704"></canvas>
+
+            <div class="touch-controls" aria-hidden="true">
+                <div class="dpad">
+                    <button class="dpad-btn dpad-up"    data-touch="up">&uarr;</button>
+                    <button class="dpad-btn dpad-left"  data-touch="left">&larr;</button>
+                    <button class="dpad-btn dpad-right" data-touch="right">&rarr;</button>
+                    <button class="dpad-btn dpad-down"  data-touch="down">&darr;</button>
+                </div>
+                <div class="action-buttons">
+                    <button class="act-btn secondary" data-touch="pause">II</button>
+                </div>
+            </div>
+
+            <div class="hud" style="grid-template-columns: repeat(4, 1fr);">
+                <div class="hud-cell"><span class="hud-label">SCORE</span><span class="hud-value" id="score">0</span></div>
+                <div class="hud-cell"><span class="hud-label">LIVES</span><span class="hud-value" id="lives">3</span></div>
+                <div class="hud-cell"><span class="hud-label">LEVEL</span><span class="hud-value" id="level">1</span></div>
+                <div class="hud-cell"><span class="hud-label">BEST</span><span class="hud-value accent" id="best">0</span></div>
+            </div>
+
+            <div class="overlay" id="overlay-title">
+                <div class="panel">
+                    <h2>PELLET CHASE</h2>
+                    <p class="tag">Eat the dots. Dodge the ghosts. Repeat.</p>
+                    <div class="how">
+                        <div class="how-row"><span class="key">WASD</span> or <span class="key">&uarr;&darr;&larr;&rarr;</span> &mdash; turn</div>
+                        <div class="how-row"><span class="key">P</span> pause &middot; <span class="key">R</span> restart</div>
+                        <div class="how-row" style="margin-top:8px;color:var(--muted)">Eat a <strong style="color:#ffd06b">power pellet</strong> to flip ghosts to vulnerable. Then chase <em>them</em>.</div>
+                    </div>
+                    <button class="btn-play" id="btn-play">PLAY</button>
+                </div>
+            </div>
+
+            <div class="overlay hidden" id="overlay-pause">
+                <div class="panel">
+                    <h2>PAUSED</h2>
+                    <button class="btn-play" id="btn-resume">RESUME</button>
+                </div>
+            </div>
+
+            <div class="overlay hidden" id="overlay-ready">
+                <div class="panel">
+                    <h2 id="ready-title">READY?</h2>
+                    <p class="tag" id="ready-tag">Get set...</p>
+                </div>
+            </div>
+
+            <div class="overlay hidden" id="overlay-gameover">
+                <div class="panel">
+                    <h2>GAME OVER</h2>
+                    <p class="tag">Final score: <span id="final-score">0</span></p>
+                    <button class="btn-play" id="btn-retry">TRY AGAIN</button>
+                </div>
+            </div>
+        </div>
+
+        <section class="legend">
+            <h3>Ghosts</h3>
+            <div class="ghost-grid">
+                <div class="g-row"><span class="g-dot" style="background:#ff2e63"></span><div><strong>Blinky</strong><span>The Chaser. Locks onto you and pursues.</span></div></div>
+                <div class="g-row"><span class="g-dot" style="background:#ff66cc"></span><div><strong>Pinky</strong><span>The Ambusher. Aims 4 tiles ahead of you.</span></div></div>
+                <div class="g-row"><span class="g-dot" style="background:#5fd0ff"></span><div><strong>Inky</strong><span>The Flanker. Position depends on Blinky &amp; you.</span></div></div>
+                <div class="g-row"><span class="g-dot" style="background:#ffd06b"></span><div><strong>Clyde</strong><span>The Coward. Runs when close, hunts when far.</span></div></div>
+            </div>
+        </section>
+
+        <section class="legend">
+            <h3>High Scores</h3>
+            <ul class="hs-list">
+                <li><span class="hs-cat">BEST SCORE</span><span class="hs-val" id="hs-score">0</span></li>
+                <li><span class="hs-cat">HIGHEST LEVEL</span><span class="hs-val" id="hs-level">0</span></li>
+            </ul>
+        </section>
+    </div>
+
+    <script src="game.js"></script>
+</body>
+</html>

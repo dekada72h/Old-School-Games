@@ -7,14 +7,14 @@ classics — no install, no ads, no trackers.
 
 ## What's in here
 
-| Game           | Status     | Path             |
-| -------------- | ---------- | ---------------- |
-| Bomb Blitz     | Playable   | `/bomberman/`    |
-| Slither        | Coming     | _planned_        |
-| Block Drop     | Coming     | _planned_        |
-| Pellet Chase   | Coming     | _planned_        |
-| Star Defender  | Coming     | _planned_        |
-| Brick Smash    | Coming     | _planned_        |
+| Game           | Status   | Remake of        | Path                |
+| -------------- | -------- | ---------------- | ------------------- |
+| Bomb Blitz     | Live     | Bomberman        | `/bomberman/`       |
+| Slither        | Live     | Snake            | `/slither/`         |
+| Block Drop     | Live     | Tetris           | `/block-drop/`      |
+| Pellet Chase   | Live     | Pac-Man          | `/pellet-chase/`    |
+| Star Defender  | Live     | Space Invaders   | `/star-defender/`   |
+| Brick Smash    | Live     | Breakout/Arkanoid| `/brick-smash/`     |
 
 Each game is fully self-contained — pure HTML5 canvas and vanilla JS.
 No build step, no framework, no megabytes.

@@ -147,29 +147,67 @@
         onScroll();
     }
 
+    // ---------- Cursor spotlight ----------
+    const glow = document.getElementById('cursor-glow');
+    if (glow && !reduced && window.matchMedia('(hover: hover)').matches) {
+        let gx = 0, gy = 0, tx = 0, ty = 0, glowVisible = false;
+        document.addEventListener('mousemove', e => {
+            tx = e.clientX; ty = e.clientY;
+            if (!glowVisible) { glow.classList.add('visible'); glowVisible = true; }
+        }, { passive: true });
+        document.addEventListener('mouseleave', () => { glow.classList.remove('visible'); glowVisible = false; });
+        const tickGlow = () => {
+            gx += (tx - gx) * 0.18;
+            gy += (ty - gy) * 0.18;
+            glow.style.transform = `translate(${gx}px, ${gy}px) translate(-50%, -50%)`;
+            requestAnimationFrame(tickGlow);
+        };
+        tickGlow();
+    }
+
     // ---------- Counter-up ----------
+    // Resolve live-count dynamically (counts .badge-live cards on the page)
+    const liveCount = document.querySelectorAll('.game-card--live').length || 1;
+    document.querySelectorAll('[data-counter-live]').forEach(el => {
+        el.dataset.counter = String(liveCount);
+        el.textContent = '0';
+    });
+    document.querySelectorAll('[data-counter]').forEach(el => { el.textContent = '0'; });
+
+    function animateCounter(el) {
+        const target = parseInt(el.dataset.counter, 10) || 0;
+        const dur = 1400;
+        const start = performance.now();
+        const tick = (t) => {
+            const k = Math.min(1, (t - start) / dur);
+            const eased = 1 - Math.pow(1 - k, 3);
+            el.textContent = Math.round(target * eased).toString();
+            if (k < 1) requestAnimationFrame(tick);
+            else el.textContent = String(target);
+        };
+        requestAnimationFrame(tick);
+    }
+
     const counters = document.querySelectorAll('[data-counter]');
-    if (counters.length && 'IntersectionObserver' in window) {
-        const counted = new WeakSet();
-        const co = new IntersectionObserver(entries => {
-            for (const e of entries) {
-                if (e.isIntersecting && !counted.has(e.target)) {
-                    counted.add(e.target);
-                    const el = e.target;
-                    const target = parseInt(el.dataset.counter, 10) || 0;
-                    const dur = 1200;
-                    const start = performance.now();
-                    const tick = (t) => {
-                        const k = Math.min(1, (t - start) / dur);
-                        const eased = 1 - Math.pow(1 - k, 3);
-                        el.textContent = Math.round(target * eased).toString();
-                        if (k < 1) requestAnimationFrame(tick);
-                    };
-                    requestAnimationFrame(tick);
+    if (counters.length) {
+        if ('IntersectionObserver' in window) {
+            const counted = new WeakSet();
+            const co = new IntersectionObserver(entries => {
+                for (const e of entries) {
+                    if (e.isIntersecting && !counted.has(e.target)) {
+                        counted.add(e.target);
+                        animateCounter(e.target);
+                    }
                 }
-            }
-        }, { threshold: 0.5 });
-        counters.forEach(c => co.observe(c));
+            }, { threshold: 0.2 });
+            counters.forEach(c => co.observe(c));
+            // Failsafe: if never triggered after 1s, animate anyway
+            setTimeout(() => counters.forEach(c => {
+                if (!counted.has(c)) { counted.add(c); animateCounter(c); }
+            }), 1000);
+        } else {
+            counters.forEach(animateCounter);
+        }
     }
 
     // ---------- Reveal on scroll ----------

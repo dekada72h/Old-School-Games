@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Star Defender — Modern Space Invaders Remake</title>
+    <meta name="description" content="A modern remake of Space Invaders (Taito 1978). Endless waves, mothership bonuses, screen-shake, neon aesthetic.">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=Inter:wght@400;600;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="../assets/css/game-shell.css">
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="scanlines" aria-hidden="true"></div>
+
+    <div class="game-shell">
+        <header class="game-header">
+            <a href="../" class="back-link">&larr; ARCADE</a>
+            <h1 class="title">STAR <span class="title-accent">DEFENDER</span></h1>
+            <div class="subtitle">A modern remake of Space Invaders (Taito 1978)</div>
+        </header>
+
+        <div class="game-frame">
+            <canvas id="game" width="640" height="640"></canvas>
+
+            <div class="touch-controls" aria-hidden="true">
+                <div class="dpad" style="width:auto;height:auto;display:flex;gap:14px;">
+                    <button class="dpad-btn" data-touch="left"  style="position:static;width:60px;height:60px;font-size:22px;">&larr;</button>
+                    <button class="dpad-btn" data-touch="right" style="position:static;width:60px;height:60px;font-size:22px;">&rarr;</button>
+                </div>
+                <div class="action-buttons">
+                    <button class="act-btn" data-touch="fire">FIRE</button>
+                    <button class="act-btn secondary" data-touch="pause">II</button>
+                </div>
+            </div>
+
+            <div class="hud" style="grid-template-columns: repeat(4, 1fr);">
+                <div class="hud-cell"><span class="hud-label">SCORE</span><span class="hud-value" id="score">0</span></div>
+                <div class="hud-cell"><span class="hud-label">LIVES</span><span class="hud-value" id="lives">3</span></div>
+                <div class="hud-cell"><span class="hud-label">WAVE</span><span class="hud-value" id="wave">1</span></div>
+                <div class="hud-cell"><span class="hud-label">BEST</span><span class="hud-value accent" id="best">0</span></div>
+            </div>
+
+            <div class="overlay" id="overlay-title">
+                <div class="panel">
+                    <h2>STAR DEFENDER</h2>
+                    <p class="tag">Earth's only hope. Yeah, no pressure.</p>
+                    <div class="how">
+                        <div class="how-row"><span class="key">A&nbsp;D</span> or <span class="key">&larr;&rarr;</span> &mdash; move ship</div>
+                        <div class="how-row"><span class="key">Space</span> &mdash; fire</div>
+                        <div class="how-row"><span class="key">P</span> pause &middot; <span class="key">R</span> restart</div>
+                    </div>
+                    <button class="btn-play" id="btn-play">PLAY</button>
+                </div>
+            </div>
+
+            <div class="overlay hidden" id="overlay-pause">
+                <div class="panel">
+                    <h2>PAUSED</h2>
+                    <button class="btn-play" id="btn-resume">RESUME</button>
+                </div>
+            </div>
+
+            <div class="overlay hidden" id="overlay-wave">
+                <div class="panel">
+                    <h2 id="wave-title">WAVE 1</h2>
+                    <p class="tag" id="wave-tag">Incoming...</p>
+                </div>
+            </div>
+
+            <div class="overlay hidden" id="overlay-gameover">
+                <div class="panel">
+                    <h2>GAME OVER</h2>
+                    <p class="tag">Earth fell. Score: <span id="final-score">0</span></p>
+                    <button class="btn-play" id="btn-retry">TRY AGAIN</button>
+                </div>
+            </div>
+        </div>
+
+        <section class="legend">
+            <h3>Enemies</h3>
+            <div class="enemy-grid">
+                <div class="enemy"><div class="enemy-art enemy-1"></div><div><strong>Squidlet</strong><span>Front line · 30 pts</span></div></div>
+                <div class="enemy"><div class="enemy-art enemy-2"></div><div><strong>Cruncher</strong><span>Mid · 20 pts</span></div></div>
+                <div class="enemy"><div class="enemy-art enemy-3"></div><div><strong>Crawler</strong><span>Rear · 10 pts</span></div></div>
+                <div class="enemy"><div class="enemy-art enemy-ufo"></div><div><strong>Mothership</strong><span>Crosses overhead · 100-300 pts</span></div></div>
+            </div>
+        </section>
+
+        <section class="legend">
+            <h3>High Scores</h3>
+            <ul class="hs-list">
+                <li><span class="hs-cat">BEST SCORE</span><span class="hs-val" id="hs-score">0</span></li>
+                <li><span class="hs-cat">HIGHEST WAVE</span><span class="hs-val" id="hs-wave">0</span></li>
+            </ul>
+        </section>
+    </div>
+
+    <script src="game.js"></script>
+</body>
+</html>

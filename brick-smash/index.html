@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Brick Smash — Modern Breakout Remake</title>
+    <meta name="description" content="A modern remake of the classic Breakout/Arkanoid. Hand-built brick layouts, power-ups, multi-ball chaos.">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=Inter:wght@400;600;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="../assets/css/game-shell.css">
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="scanlines" aria-hidden="true"></div>
+
+    <div class="game-shell">
+        <header class="game-header">
+            <a href="../" class="back-link">&larr; ARCADE</a>
+            <h1 class="title">BRICK <span class="title-accent">SMASH</span></h1>
+            <div class="subtitle">A modern remake of Breakout (Atari 1976) &middot; Arkanoid (Taito 1986)</div>
+        </header>
+
+        <div class="game-frame">
+            <canvas id="game" width="700" height="600"></canvas>
+
+            <div class="touch-controls" aria-hidden="true">
+                <div class="dpad" style="width:auto;height:auto;display:flex;gap:14px;">
+                    <button class="dpad-btn" data-touch="left"  style="position:static;width:60px;height:60px;font-size:22px;">&larr;</button>
+                    <button class="dpad-btn" data-touch="right" style="position:static;width:60px;height:60px;font-size:22px;">&rarr;</button>
+                </div>
+                <div class="action-buttons">
+                    <button class="act-btn" data-touch="launch">GO</button>
+                    <button class="act-btn secondary" data-touch="pause">II</button>
+                </div>
+            </div>
+
+            <div class="hud" style="grid-template-columns: repeat(4, 1fr);">
+                <div class="hud-cell"><span class="hud-label">SCORE</span><span class="hud-value" id="score">0</span></div>
+                <div class="hud-cell"><span class="hud-label">LIVES</span><span class="hud-value" id="lives">3</span></div>
+                <div class="hud-cell"><span class="hud-label">LEVEL</span><span class="hud-value" id="level">1</span></div>
+                <div class="hud-cell"><span class="hud-label">BEST</span><span class="hud-value accent" id="best">0</span></div>
+            </div>
+
+            <div class="overlay" id="overlay-title">
+                <div class="panel">
+                    <h2>BRICK SMASH</h2>
+                    <p class="tag">Bricks broke you in '76. Now break them back.</p>
+                    <div class="how">
+                        <div class="how-row"><span class="key">A&nbsp;D</span> or <span class="key">&larr;&rarr;</span> &mdash; move paddle</div>
+                        <div class="how-row"><span class="key">Space</span> &mdash; launch ball</div>
+                        <div class="how-row"><span class="key">Mouse</span> &mdash; paddle follows cursor</div>
+                        <div class="how-row"><span class="key">P</span> pause &middot; <span class="key">R</span> restart</div>
+                    </div>
+                    <button class="btn-play" id="btn-play">PLAY</button>
+                </div>
+            </div>
+
+            <div class="overlay hidden" id="overlay-pause">
+                <div class="panel">
+                    <h2>PAUSED</h2>
+                    <button class="btn-play" id="btn-resume">RESUME</button>
+                </div>
+            </div>
+
+            <div class="overlay hidden" id="overlay-level">
+                <div class="panel">
+                    <h2 id="level-title">LEVEL 1</h2>
+                    <p class="tag" id="level-tag">Get ready...</p>
+                </div>
+            </div>
+
+            <div class="overlay hidden" id="overlay-gameover">
+                <div class="panel">
+                    <h2>GAME OVER</h2>
+                    <p class="tag">Final score: <span id="final-score">0</span></p>
+                    <button class="btn-play" id="btn-retry">TRY AGAIN</button>
+                </div>
+            </div>
+
+            <div class="overlay hidden" id="overlay-victory">
+                <div class="panel">
+                    <h2>VICTORY!</h2>
+                    <p class="tag">All levels cleared. Score: <span id="win-score">0</span></p>
+                    <button class="btn-play" id="btn-newgame">PLAY AGAIN</button>
+                </div>
+            </div>
+        </div>
+
+        <section class="legend">
+            <h3>Power-ups</h3>
+            <div class="pu-grid">
+                <div class="pu"><span class="pu-icon" style="background:#36e3a4">+</span><div><strong>Multi</strong><span>3 balls at once</span></div></div>
+                <div class="pu"><span class="pu-icon" style="background:#5fd0ff">&harr;</span><div><strong>Wide</strong><span>Paddle stretches</span></div></div>
+                <div class="pu"><span class="pu-icon" style="background:#ffd06b">L</span><div><strong>Laser</strong><span>Paddle shoots up</span></div></div>
+                <div class="pu"><span class="pu-icon" style="background:#9b6bff">S</span><div><strong>Slow</strong><span>Ball slows briefly</span></div></div>
+                <div class="pu"><span class="pu-icon" style="background:#ff66cc">&hearts;</span><div><strong>1UP</strong><span>Extra life</span></div></div>
+                <div class="pu"><span class="pu-icon" style="background:#ff2e63">&times;</span><div><strong>Curse</strong><span>Paddle shrinks (avoid!)</span></div></div>
+            </div>
+        </section>
+
+        <section class="legend">
+            <h3>High Scores</h3>
+            <ul class="hs-list">
+                <li><span class="hs-cat">BEST SCORE</span><span class="hs-val" id="hs-score">0</span></li>
+                <li><span class="hs-cat">HIGHEST LEVEL</span><span class="hs-val" id="hs-level">0</span></li>
+            </ul>
+        </section>
+    </div>
+
+    <script src="game.js"></script>
+</body>
+</html>

@@ -58,6 +58,9 @@
     <!-- Animated star field canvas -->
     <canvas id="starfield" aria-hidden="true"></canvas>
 
+    <!-- Cursor spotlight -->
+    <div class="cursor-glow" id="cursor-glow" aria-hidden="true"></div>
+
     <!-- CRT scanline overlay -->
     <div class="scanlines" aria-hidden="true"></div>
     <div class="vignette" aria-hidden="true"></div>
@@ -125,11 +128,11 @@
                 <!-- Stat row -->
                 <div class="hero-stats grid grid-cols-3 gap-3 sm:gap-8 max-w-2xl mx-auto">
                     <div class="stat">
-                        <div class="stat-value" data-counter="1">0</div>
+                        <div class="stat-value" data-counter-live>1</div>
                         <div class="stat-label">PLAYABLE</div>
                     </div>
                     <div class="stat">
-                        <div class="stat-value" data-counter="100">0</div>
+                        <div class="stat-value" data-counter="100">100</div>
                         <div class="stat-label">STAGES</div>
                     </div>
                     <div class="stat">
@@ -152,7 +155,7 @@
                 <div class="text-center mb-16">
                     <div class="section-eyebrow">// ARCADE //</div>
                     <h2 class="section-title">Pick your <span class="text-neon-pink">poison</span>.</h2>
-                    <p class="section-sub">One game live. More dropping into the cabinet soon.</p>
+                    <p class="section-sub">Six cabinets, all open. Six different ways to lose track of an hour.</p>
                 </div>
 
                 <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -219,8 +222,8 @@
                         </div>
                     </a>
 
-                    <!-- Snake (coming soon) -->
-                    <div class="game-card game-card--soon" data-tilt>
+                    <!-- Slither (live) — Snake remake -->
+                    <a href="slither/" class="game-card game-card--live" data-tilt>
                         <div class="game-card-art game-card-art--snake">
                             <svg viewBox="0 0 200 200" class="absolute inset-0 w-full h-full" preserveAspectRatio="xMidYMid slice">
                                 <rect width="200" height="200" fill="url(#grid)"/>
@@ -235,19 +238,20 @@
                                 <circle cx="48" cy="108" r="2" fill="#0a0617"/>
                                 <rect x="100" y="50" width="14" height="14" rx="3" fill="#ff2e63"/>
                             </svg>
+                            <div class="game-card-shine"></div>
                         </div>
                         <div class="game-card-body">
                             <div class="flex items-center justify-between mb-3">
-                                <span class="badge badge-soon">SOON</span>
-                                <span class="font-pixel text-[9px] text-slate-500">~Q3</span>
+                                <span class="badge badge-live"><span class="badge-dot"></span> LIVE</span>
+                                <span class="font-pixel text-[9px] text-slate-500">Snake</span>
                             </div>
                             <h3 class="game-card-title">Slither</h3>
-                            <p class="game-card-desc text-sm">The classic Snake reborn — wrap mode, speed scaling, daily seeds.</p>
+                            <p class="game-card-desc text-sm">A modern Snake remake — wrap walls, gold bonus food, stamina boost, speed scaling.</p>
                         </div>
-                    </div>
+                    </a>
 
-                    <!-- Tetris (coming soon) -->
-                    <div class="game-card game-card--soon" data-tilt>
+                    <!-- Block Drop (live) — Tetris remake -->
+                    <a href="block-drop/" class="game-card game-card--live" data-tilt>
                         <div class="game-card-art game-card-art--tetris">
                             <svg viewBox="0 0 200 200" class="absolute inset-0 w-full h-full" preserveAspectRatio="xMidYMid slice">
                                 <rect width="200" height="200" fill="url(#grid)"/>
@@ -273,19 +277,20 @@
                                     <rect x="80" y="160" width="20" height="20" fill="#ff2e63"/>
                                 </g>
                             </svg>
+                            <div class="game-card-shine"></div>
                         </div>
                         <div class="game-card-body">
                             <div class="flex items-center justify-between mb-3">
-                                <span class="badge badge-soon">SOON</span>
-                                <span class="font-pixel text-[9px] text-slate-500">~Q3</span>
+                                <span class="badge badge-live"><span class="badge-dot"></span> LIVE</span>
+                                <span class="font-pixel text-[9px] text-slate-500">Tetris</span>
                             </div>
                             <h3 class="game-card-title">Block Drop</h3>
-                            <p class="game-card-desc text-sm">Falling tetrominoes, 7-bag randomizer, T-spins, hold piece.</p>
+                            <p class="game-card-desc text-sm">A modern Tetris remake — 7-bag randomizer, hold piece, hard drop, ghost preview, level scaling.</p>
                         </div>
-                    </div>
+                    </a>
 
-                    <!-- Pacman (coming soon) -->
-                    <div class="game-card game-card--soon" data-tilt>
+                    <!-- Pellet Chase (live) — Pac-Man remake -->
+                    <a href="pellet-chase/" class="game-card game-card--live" data-tilt>
                         <div class="game-card-art game-card-art--pac">
                             <svg viewBox="0 0 200 200" class="absolute inset-0 w-full h-full" preserveAspectRatio="xMidYMid slice">
                                 <rect width="200" height="200" fill="url(#grid)"/>
@@ -317,19 +322,20 @@
                                     <circle cx="6" cy="-6" r="1.5" fill="#0a0617"/>
                                 </g>
                             </svg>
+                            <div class="game-card-shine"></div>
                         </div>
                         <div class="game-card-body">
                             <div class="flex items-center justify-between mb-3">
-                                <span class="badge badge-soon">SOON</span>
-                                <span class="font-pixel text-[9px] text-slate-500">~Q4</span>
+                                <span class="badge badge-live"><span class="badge-dot"></span> LIVE</span>
+                                <span class="font-pixel text-[9px] text-slate-500">Pac-Man</span>
                             </div>
                             <h3 class="game-card-title">Pellet Chase</h3>
-                            <p class="game-card-desc text-sm">Maze navigation, four ghosts with personalities, fruit bonuses.</p>
+                            <p class="game-card-desc text-sm">A modern Pac-Man remake — full maze, four ghosts with classic personalities, power pellets, multi-level.</p>
                         </div>
-                    </div>
+                    </a>
 
-                    <!-- Space Invaders -->
-                    <div class="game-card game-card--soon" data-tilt>
+                    <!-- Star Defender (live) — Space Invaders remake -->
+                    <a href="star-defender/" class="game-card game-card--live" data-tilt>
                         <div class="game-card-art game-card-art--invaders">
                             <svg viewBox="0 0 200 200" class="absolute inset-0 w-full h-full" preserveAspectRatio="xMidYMid slice">
                                 <rect width="200" height="200" fill="url(#grid)"/>
@@ -360,19 +366,20 @@
                                 </g>
                                 <rect x="98" y="100" width="2" height="20" fill="#ffd06b"/>
                             </svg>
+                            <div class="game-card-shine"></div>
                         </div>
                         <div class="game-card-body">
                             <div class="flex items-center justify-between mb-3">
-                                <span class="badge badge-soon">SOON</span>
-                                <span class="font-pixel text-[9px] text-slate-500">~Q4</span>
+                                <span class="badge badge-live"><span class="badge-dot"></span> LIVE</span>
+                                <span class="font-pixel text-[9px] text-slate-500">Space&nbsp;Invaders</span>
                             </div>
                             <h3 class="game-card-title">Star Defender</h3>
-                            <p class="game-card-desc text-sm">Endless waves, mothership bonuses, screen-shake galore.</p>
+                            <p class="game-card-desc text-sm">A modern Space Invaders remake — endless waves, destructible bunkers, UFO bonuses, screen shake.</p>
                         </div>
-                    </div>
+                    </a>
 
-                    <!-- Pong / Breakout -->
-                    <div class="game-card game-card--soon" data-tilt>
+                    <!-- Brick Smash (live) — Breakout/Arkanoid remake -->
+                    <a href="brick-smash/" class="game-card game-card--live" data-tilt>
                         <div class="game-card-art game-card-art--breakout">
                             <svg viewBox="0 0 200 200" class="absolute inset-0 w-full h-full" preserveAspectRatio="xMidYMid slice">
                                 <rect width="200" height="200" fill="url(#grid)"/>
@@ -393,16 +400,17 @@
                                 <circle cx="100" cy="120" r="6" fill="#fff"/>
                                 <rect x="74" y="170" width="52" height="8" rx="2" fill="#5fd0ff"/>
                             </svg>
+                            <div class="game-card-shine"></div>
                         </div>
                         <div class="game-card-body">
                             <div class="flex items-center justify-between mb-3">
-                                <span class="badge badge-soon">SOON</span>
-                                <span class="font-pixel text-[9px] text-slate-500">~2027</span>
+                                <span class="badge badge-live"><span class="badge-dot"></span> LIVE</span>
+                                <span class="font-pixel text-[9px] text-slate-500">Breakout</span>
                             </div>
                             <h3 class="game-card-title">Brick Smash</h3>
-                            <p class="game-card-desc text-sm">Breakout meets pinball physics. 50 hand-built layouts.</p>
+                            <p class="game-card-desc text-sm">A modern Breakout / Arkanoid remake — 7 levels, 6 power-ups, lasers, multi-ball, mouse + touch control.</p>
                         </div>
-                    </div>
+                    </a>
 
                     <!-- Suggestion / community card -->
                     <div class="game-card game-card--ghost md:col-span-2 lg:col-span-3 lg:col-start-1">

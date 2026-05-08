@@ -1,0 +1,69 @@
+/* Block Drop — cyan accent */
+:root { --accent: #5fd0ff; }
+.title-accent { color: var(--accent); }
+.panel { border-color: rgba(95, 208, 255, 0.3); box-shadow: 0 20px 60px rgba(0,0,0,0.5), 0 0 60px rgba(95, 208, 255, 0.15); }
+.panel h2 { text-shadow: 0 0 12px var(--accent); }
+.btn-play { background: linear-gradient(135deg, #5fd0ff, #2493cc); box-shadow: 0 8px 24px rgba(95, 208, 255, 0.4), inset 0 1px 0 rgba(255,255,255,0.2); color: #042736; }
+.btn-play:hover { box-shadow: 0 12px 32px rgba(95, 208, 255, 0.5); }
+.act-btn { background: rgba(95, 208, 255, 0.15); border-color: rgba(95, 208, 255, 0.4); color: var(--accent); }
+.dpad-btn:active { background: var(--accent); color: var(--bg-900); }
+.legend h3 { color: var(--accent); }
+
+#game, #hold, #next {
+    background: #050208;
+    border-radius: 6px;
+    image-rendering: pixelated;
+    box-shadow: inset 0 0 0 1px rgba(255,255,255,0.04);
+}
+#game { box-shadow: inset 0 0 0 1px rgba(255,255,255,0.04), 0 0 40px rgba(95, 208, 255, 0.15); }
+
+.bd-layout {
+    display: flex;
+    gap: 14px;
+    align-items: flex-start;
+    justify-content: center;
+}
+.bd-side {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    min-width: 130px;
+}
+.bd-side--left { align-items: flex-end; }
+.bd-side--right { align-items: flex-start; }
+.bd-mini-label {
+    font-family: 'Press Start 2P', monospace;
+    font-size: 9px;
+    letter-spacing: 0.18em;
+    color: var(--muted);
+    margin-bottom: 4px;
+}
+
+.bd-stats {
+    background: rgba(0,0,0,0.3);
+    border: 1px solid rgba(255,255,255,0.05);
+    border-radius: 8px;
+    padding: 8px 10px;
+    width: 120px;
+    font-family: 'Press Start 2P', monospace;
+    font-size: 10px;
+}
+.bd-stats > div {
+    display: flex;
+    justify-content: space-between;
+    padding: 4px 0;
+    color: var(--muted);
+}
+.bd-stats > div span:last-child {
+    color: var(--text);
+}
+
+@media (max-width: 720px) {
+    .bd-layout { flex-direction: column; align-items: center; }
+    .bd-side { flex-direction: row; min-width: 0; align-items: center; gap: 12px; }
+    .bd-side--right { width: 100%; justify-content: center; }
+    #next { width: 100%; max-width: 280px; height: 80px; }
+    #hold { width: 80px; height: 80px; }
+    .bd-stats { width: auto; flex: 1; }
+    .bd-mini-label { margin: 0; }
+}

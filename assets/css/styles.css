@@ -25,14 +25,47 @@
 
 html { scroll-behavior: smooth; }
 body {
-    background:
-        radial-gradient(ellipse 80% 50% at 50% 0%, rgba(255, 46, 99, 0.15), transparent 50%),
-        radial-gradient(ellipse 60% 50% at 100% 100%, rgba(95, 208, 255, 0.12), transparent 50%),
-        radial-gradient(ellipse 60% 50% at 0% 80%, rgba(155, 107, 255, 0.10), transparent 50%),
-        linear-gradient(180deg, var(--bg-800) 0%, var(--bg-900) 100%);
+    background: linear-gradient(180deg, var(--bg-800) 0%, var(--bg-900) 100%);
     background-attachment: fixed;
     min-height: 100vh;
+    position: relative;
 }
+
+/* Slow drifting aurora — sits below everything */
+body::before {
+    content: "";
+    position: fixed;
+    inset: -10%;
+    z-index: -1;
+    pointer-events: none;
+    background:
+        radial-gradient(ellipse 60% 50% at 20% 20%, rgba(255, 46, 99, 0.18), transparent 50%),
+        radial-gradient(ellipse 50% 50% at 80% 30%, rgba(95, 208, 255, 0.14), transparent 50%),
+        radial-gradient(ellipse 50% 50% at 50% 80%, rgba(155, 107, 255, 0.16), transparent 50%),
+        radial-gradient(ellipse 40% 40% at 90% 90%, rgba(255, 102, 204, 0.14), transparent 50%);
+    filter: blur(40px);
+    animation: aurora 20s ease-in-out infinite;
+}
+@keyframes aurora {
+    0%, 100% { transform: translate(0, 0) scale(1); }
+    33%      { transform: translate(-3%, 2%) scale(1.05); }
+    66%      { transform: translate(2%, -3%) scale(0.97); }
+}
+
+/* Cursor spotlight — soft glow that follows mouse */
+.cursor-glow {
+    position: fixed;
+    pointer-events: none;
+    width: 600px; height: 600px;
+    border-radius: 50%;
+    transform: translate(-50%, -50%);
+    background: radial-gradient(circle, rgba(255, 46, 99, 0.08), transparent 60%);
+    z-index: 0;
+    opacity: 0;
+    transition: opacity 0.3s;
+    mix-blend-mode: screen;
+}
+.cursor-glow.visible { opacity: 1; }
 
 /* ---------- Star field canvas ---------- */
 #starfield {
@@ -102,15 +135,18 @@ main, nav, footer { position: relative; z-index: 1; }
 
 /* ---------- Nav ---------- */
 #nav {
-    backdrop-filter: blur(0px);
-    background: transparent;
-    transition: backdrop-filter 0.3s, background 0.3s, border 0.3s;
-    border-bottom: 1px solid transparent;
+    background: rgba(10, 6, 23, 0.35);
+    backdrop-filter: blur(14px) saturate(140%);
+    -webkit-backdrop-filter: blur(14px) saturate(140%);
+    border-bottom: 1px solid rgba(255,255,255,0.04);
+    transition: background 0.3s, backdrop-filter 0.3s, border 0.3s, box-shadow 0.3s;
 }
 #nav.is-scrolled {
     background: rgba(10, 6, 23, 0.7);
-    backdrop-filter: blur(14px);
-    border-bottom: 1px solid rgba(255,255,255,0.06);
+    backdrop-filter: blur(22px) saturate(160%);
+    -webkit-backdrop-filter: blur(22px) saturate(160%);
+    border-bottom: 1px solid rgba(255,255,255,0.08);
+    box-shadow: 0 6px 30px rgba(0,0,0,0.35);
 }
 .nav-link {
     position: relative;
@@ -241,6 +277,11 @@ main, nav, footer { position: relative; z-index: 1; }
         0 2px 0 rgba(0,0,0,0.4);
     transition: transform 0.15s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.2s;
     overflow: hidden;
+    animation: pulseGlow 3s ease-in-out infinite;
+}
+@keyframes pulseGlow {
+    0%, 100% { box-shadow: 0 0 0 1px rgba(255,255,255,0.1) inset, 0 8px 24px rgba(255, 46, 99, 0.4), 0 2px 0 rgba(0,0,0,0.4); }
+    50%      { box-shadow: 0 0 0 1px rgba(255,255,255,0.15) inset, 0 12px 36px rgba(255, 46, 99, 0.6), 0 0 60px rgba(255, 46, 99, 0.3), 0 2px 0 rgba(0,0,0,0.4); }
 }
 .btn-primary::before {
     content: "";
@@ -360,6 +401,17 @@ main, nav, footer { position: relative; z-index: 1; }
     color: var(--cyan);
     margin-bottom: 1rem;
     text-shadow: 0 0 12px rgba(95, 208, 255, 0.4);
+    background: linear-gradient(90deg, var(--cyan), var(--pink), var(--cyan));
+    background-size: 200% auto;
+    -webkit-background-clip: text;
+            background-clip: text;
+    -webkit-text-fill-color: transparent;
+    animation: eyebrowShine 4s linear infinite;
+    display: inline-block;
+}
+@keyframes eyebrowShine {
+    0% { background-position: 0% 0%; }
+    100% { background-position: 200% 0%; }
 }
 .section-title {
     font-family: 'Orbitron', sans-serif;
@@ -391,7 +443,18 @@ main, nav, footer { position: relative; z-index: 1; }
     backdrop-filter: blur(6px);
     text-decoration: none;
     color: inherit;
+    animation: cardFloat 8s ease-in-out infinite;
 }
+.game-card:nth-child(2) { animation-delay: -1.6s; }
+.game-card:nth-child(3) { animation-delay: -3.2s; }
+.game-card:nth-child(4) { animation-delay: -4.8s; }
+.game-card:nth-child(5) { animation-delay: -6.4s; }
+.game-card:nth-child(6) { animation-delay: -2.0s; }
+@keyframes cardFloat {
+    0%, 100% { transform: translateY(0); }
+    50%      { transform: translateY(-6px); }
+}
+.game-card:hover { animation-play-state: paused; }
 .game-card::before {
     content: "";
     position: absolute;
@@ -595,6 +658,11 @@ main, nav, footer { position: relative; z-index: 1; }
     position: relative;
     transform: perspective(800px) rotateY(-12deg) rotateX(4deg);
     transition: transform 0.6s cubic-bezier(0.65, 0, 0.35, 1);
+    animation: cabinetSway 7s ease-in-out infinite;
+}
+@keyframes cabinetSway {
+    0%, 100% { transform: perspective(800px) rotateY(-12deg) rotateX(4deg) translateY(0); }
+    50%      { transform: perspective(800px) rotateY(-9deg) rotateX(2deg) translateY(-8px); }
 }
 .featured-banner:hover .cabinet { transform: perspective(800px) rotateY(-6deg) rotateX(2deg); }
 .cabinet::before {

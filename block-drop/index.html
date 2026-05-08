@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Block Drop — Modern Tetris Remake</title>
+    <meta name="description" content="A modern remake of Tetris (Pajitnov 1984). 7-bag, hold, hard drop, level scaling. Classic gameplay, neon polish.">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=Inter:wght@400;600;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="../assets/css/game-shell.css">
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="scanlines" aria-hidden="true"></div>
+
+    <div class="game-shell">
+        <header class="game-header">
+            <a href="../" class="back-link">&larr; ARCADE</a>
+            <h1 class="title">BLOCK <span class="title-accent">DROP</span></h1>
+            <div class="subtitle">A modern remake of Tetris (Pajitnov 1984)</div>
+        </header>
+
+        <div class="game-frame block-drop-frame">
+            <div class="bd-layout">
+                <div class="bd-side bd-side--left">
+                    <div class="bd-mini-label">HOLD</div>
+                    <canvas id="hold" width="120" height="120"></canvas>
+
+                    <div class="bd-mini-label" style="margin-top:18px;">STATS</div>
+                    <div class="bd-stats">
+                        <div><span>Lines</span><span id="lines">0</span></div>
+                        <div><span>Level</span><span id="level">1</span></div>
+                        <div><span>Tetris</span><span id="tetris">0</span></div>
+                    </div>
+                </div>
+
+                <canvas id="game" width="300" height="600"></canvas>
+
+                <div class="bd-side bd-side--right">
+                    <div class="bd-mini-label">NEXT</div>
+                    <canvas id="next" width="120" height="320"></canvas>
+                </div>
+            </div>
+
+            <div class="touch-controls" aria-hidden="true">
+                <div class="dpad">
+                    <button class="dpad-btn dpad-up"    data-touch="rotate">&#x21bb;</button>
+                    <button class="dpad-btn dpad-left"  data-touch="left">&larr;</button>
+                    <button class="dpad-btn dpad-right" data-touch="right">&rarr;</button>
+                    <button class="dpad-btn dpad-down"  data-touch="down">&darr;</button>
+                </div>
+                <div class="action-buttons">
+                    <button class="act-btn" data-touch="drop">DROP</button>
+                    <button class="act-btn secondary" data-touch="hold">HOLD</button>
+                    <button class="act-btn secondary" data-touch="pause">II</button>
+                </div>
+            </div>
+
+            <div class="hud" style="grid-template-columns: repeat(3, 1fr);">
+                <div class="hud-cell"><span class="hud-label">SCORE</span><span class="hud-value" id="score">0</span></div>
+                <div class="hud-cell"><span class="hud-label">BEST</span><span class="hud-value accent" id="best">0</span></div>
+                <div class="hud-cell"><span class="hud-label">PIECES</span><span class="hud-value" id="pieces">0</span></div>
+            </div>
+
+            <div class="overlay" id="overlay-title">
+                <div class="panel">
+                    <h2>BLOCK DROP</h2>
+                    <p class="tag">Stack 'em. Clear 'em. Don't choke.</p>
+                    <div class="how">
+                        <div class="how-row"><span class="key">A&nbsp;D</span> or <span class="key">&larr;&rarr;</span> &mdash; move</div>
+                        <div class="how-row"><span class="key">S</span> or <span class="key">&darr;</span> &mdash; soft drop</div>
+                        <div class="how-row"><span class="key">W</span> / <span class="key">&uarr;</span> &mdash; rotate (CW)</div>
+                        <div class="how-row"><span class="key">Z</span> &mdash; rotate (CCW)</div>
+                        <div class="how-row"><span class="key">Space</span> &mdash; hard drop</div>
+                        <div class="how-row"><span class="key">Shift</span> / <span class="key">C</span> &mdash; hold</div>
+                        <div class="how-row"><span class="key">P</span> pause &middot; <span class="key">R</span> restart</div>
+                    </div>
+                    <button class="btn-play" id="btn-play">PLAY</button>
+                </div>
+            </div>
+
+            <div class="overlay hidden" id="overlay-pause">
+                <div class="panel">
+                    <h2>PAUSED</h2>
+                    <button class="btn-play" id="btn-resume">RESUME</button>
+                </div>
+            </div>
+
+            <div class="overlay hidden" id="overlay-gameover">
+                <div class="panel">
+                    <h2>GAME OVER</h2>
+                    <p class="tag">Final score: <span id="final-score">0</span> &middot; <span id="final-lines">0</span> lines</p>
+                    <button class="btn-play" id="btn-retry">TRY AGAIN</button>
+                </div>
+            </div>
+        </div>
+
+        <section class="legend">
+            <h3>Scoring</h3>
+            <ul class="hs-list">
+                <li><span class="hs-cat">SINGLE</span><span class="hs-val">100 &times; level</span></li>
+                <li><span class="hs-cat">DOUBLE</span><span class="hs-val">300 &times; level</span></li>
+                <li><span class="hs-cat">TRIPLE</span><span class="hs-val">500 &times; level</span></li>
+                <li><span class="hs-cat">TETRIS (4)</span><span class="hs-val">800 &times; level</span></li>
+                <li><span class="hs-cat">SOFT DROP</span><span class="hs-val">1 / row</span></li>
+                <li><span class="hs-cat">HARD DROP</span><span class="hs-val">2 / row</span></li>
+            </ul>
+        </section>
+
+        <section class="legend">
+            <h3>High Scores</h3>
+            <ul class="hs-list">
+                <li><span class="hs-cat">BEST SCORE</span><span class="hs-val" id="hs-score">0</span></li>
+                <li><span class="hs-cat">MOST LINES</span><span class="hs-val" id="hs-lines">0</span></li>
+                <li><span class="hs-cat">HIGHEST LEVEL</span><span class="hs-val" id="hs-level">0</span></li>
+            </ul>
+        </section>
+    </div>
+
+    <script src="game.js"></script>
+</body>
+</html>
