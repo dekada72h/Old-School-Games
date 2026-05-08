@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Bomb Blitz - Modern Bomberman Remake</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=Inter:wght@400;600;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="stars"></div>
+
+    <div class="game-shell">
+        <header class="game-header">
+            <h1 class="title">BOMB <span class="title-accent">BLITZ</span></h1>
+            <div class="subtitle">A modern remake of the classic 80s arcade hit</div>
+        </header>
+
+        <div class="game-frame">
+            <canvas id="game" width="884" height="676"></canvas>
+
+            <!-- Mobile touch controls (auto-shown on touch devices) -->
+            <div class="touch-controls" id="touch-controls" aria-hidden="true">
+                <div class="dpad">
+                    <button class="dpad-btn dpad-up"    data-touch="up">&uarr;</button>
+                    <button class="dpad-btn dpad-left"  data-touch="left">&larr;</button>
+                    <button class="dpad-btn dpad-right" data-touch="right">&rarr;</button>
+                    <button class="dpad-btn dpad-down"  data-touch="down">&darr;</button>
+                </div>
+                <div class="action-buttons">
+                    <button class="act-btn act-bomb" data-touch="bomb">BOMB</button>
+                    <button class="act-btn act-det"  data-touch="detonate">DET.</button>
+                    <button class="act-btn act-pause" data-touch="pause">II</button>
+                </div>
+            </div>
+
+            <div class="hud" id="hud" style="grid-template-columns: repeat(6, 1fr);">
+                <div class="hud-cell"><span class="hud-label">STAGE</span><span class="hud-value" id="level">1</span></div>
+                <div class="hud-cell"><span class="hud-label">SCORE</span><span class="hud-value" id="score">0</span></div>
+                <div class="hud-cell"><span class="hud-label">LIVES</span><span class="hud-value" id="lives">3</span></div>
+                <div class="hud-cell"><span class="hud-label">TIME</span><span class="hud-value" id="time">3:00</span></div>
+                <div class="hud-cell"><span class="hud-label">BEST</span><span class="hud-value" id="best">0</span></div>
+                <div class="hud-cell power-cell">
+                    <span class="hud-label">POWERS</span>
+                    <span class="hud-value powers" id="powers">&mdash;</span>
+                </div>
+            </div>
+
+            <!-- Overlays -->
+            <div class="overlay" id="overlay-title">
+                <div class="panel">
+                    <h2>BOMB BLITZ</h2>
+                    <p class="tag">Drop bombs. Blast bricks. Survive the swarm.</p>
+                    <div class="how">
+                        <div class="how-row"><span class="key">WASD</span> or <span class="key">&uarr;&darr;&larr;&rarr;</span> &nbsp;&mdash;&nbsp; move</div>
+                        <div class="how-row"><span class="key">Space</span> &nbsp;&mdash;&nbsp; place bomb</div>
+                        <div class="how-row"><span class="key">Shift</span> &nbsp;&mdash;&nbsp; remote detonate <span class="hint">(if powerup)</span></div>
+                        <div class="how-row"><span class="key">P</span> pause &nbsp;&middot;&nbsp; <span class="key">M</span> mute &nbsp;&middot;&nbsp; <span class="key">R</span> restart level</div>
+                    </div>
+                    <button class="btn-play" id="btn-play">PLAY</button>
+                    <div class="credit">Pure HTML5 canvas &middot; no install needed &middot; works offline</div>
+                </div>
+            </div>
+
+            <div class="overlay hidden" id="overlay-pause">
+                <div class="panel">
+                    <h2>PAUSED</h2>
+                    <button class="btn-play" id="btn-resume">RESUME</button>
+                </div>
+            </div>
+
+            <div class="overlay hidden" id="overlay-level">
+                <div class="panel">
+                    <h2 id="level-title">LEVEL 1</h2>
+                    <p class="tag" id="level-tag">Get ready...</p>
+                </div>
+            </div>
+
+            <div class="overlay hidden" id="overlay-gameover">
+                <div class="panel">
+                    <h2>GAME OVER</h2>
+                    <p class="tag">Final score: <span id="final-score">0</span></p>
+                    <button class="btn-play" id="btn-retry">TRY AGAIN</button>
+                </div>
+            </div>
+
+            <div class="overlay hidden" id="overlay-victory">
+                <div class="panel">
+                    <h2>VICTORY!</h2>
+                    <p class="tag">You cleared every stage. Score: <span id="win-score">0</span></p>
+                    <button class="btn-play" id="btn-newgame">PLAY AGAIN</button>
+                </div>
+            </div>
+        </div>
+
+        <section class="legend">
+            <h3>Power-Ups</h3>
+            <div class="legend-grid">
+                <div class="legend-item"><div class="icon-dot c-fire">F</div><div><strong>Fire Up</strong><span>Classic: bigger / longer blast</span></div></div>
+                <div class="legend-item"><div class="icon-dot c-bomb">B</div><div><strong>Bomb Up</strong><span>Classic: carry one more bomb</span></div></div>
+                <div class="legend-item"><div class="icon-dot c-speed">S</div><div><strong>Speed Up</strong><span>Classic: move faster</span></div></div>
+                <div class="legend-item"><div class="icon-dot c-ghost">G</div><div><strong>Wall Pass</strong><span>Classic: phase through bricks (until you die)</span></div></div>
+                <div class="legend-item"><div class="icon-dot c-shield">D</div><div><strong>Shield</strong><span>NEW: absorbs one hit</span></div></div>
+                <div class="legend-item"><div class="icon-dot c-kick">K</div><div><strong>Kick</strong><span>Push bombs across the floor</span></div></div>
+                <div class="legend-item"><div class="icon-dot c-remote">R</div><div><strong>Remote</strong><span>Manual detonation w/ Shift</span></div></div>
+                <div class="legend-item"><div class="icon-dot c-time">T</div><div><strong>Time Warp</strong><span>Slows enemies (6s)</span></div></div>
+                <div class="legend-item"><div class="icon-dot c-mega">M</div><div><strong>Mega Bomb</strong><span>Cross + diagonal blast</span></div></div>
+                <div class="legend-item"><div class="icon-dot c-life">+</div><div><strong>Extra Life</strong><span>One more chance</span></div></div>
+            </div>
+        </section>
+
+        <section class="legend">
+            <h3>Monsters</h3>
+            <div class="legend-grid">
+                <div class="legend-item"><div class="icon-dot" style="background:#ff6699">W</div><div><strong>Walker</strong><span>Slow, drifts at random</span></div></div>
+                <div class="legend-item"><div class="icon-dot" style="background:#ffd06b;color:#3a2700">L</div><div><strong>Liner</strong><span>Walks in straight lines, then turns</span></div></div>
+                <div class="legend-item"><div class="icon-dot" style="background:#36e3a4;color:#003020">R</div><div><strong>Runner</strong><span>Fast, restless</span></div></div>
+                <div class="legend-item"><div class="icon-dot" style="background:#9b6bff">C</div><div><strong>Chaser</strong><span>Hunts you on sight</span></div></div>
+                <div class="legend-item"><div class="icon-dot" style="background:#5fd0ff;color:#022536">S</div><div><strong>Smart</strong><span>Pathfinds through corridors</span></div></div>
+                <div class="legend-item"><div class="icon-dot" style="background:#b993ff">P</div><div><strong>Phaser</strong><span>Walks through bricks</span></div></div>
+                <div class="legend-item"><div class="icon-dot" style="background:#ff2e63">B</div><div><strong>Boss</strong><span>Big, phases, takes 3+ hits</span></div></div>
+            </div>
+        </section>
+
+        <section class="legend">
+            <h3>High Scores</h3>
+            <ul id="hs-list" class="hs-list">
+                <li><span class="hs-cat">POINTS</span><span class="hs-val">0</span></li>
+                <li><span class="hs-cat">MONSTERS KILLED</span><span class="hs-val">0</span></li>
+                <li><span class="hs-cat">HIGHEST STAGE</span><span class="hs-val">0</span></li>
+            </ul>
+            <p style="margin:10px 0 0;color:var(--muted);font-size:11px;">Saved on this device.</p>
+        </section>
+
+        <section class="legend">
+            <h3>How a stage ends</h3>
+            <p style="margin:0;color:var(--muted);font-size:13px;line-height:1.6;">
+                Every stage hides an <strong style="color:#6dd3ff">exit door</strong> under a brick. After you've
+                killed every monster, blow up bricks to find the door, then <strong>walk onto it</strong> to clear the stage.
+                <strong style="color:#ff7a7a">Bombing the door or an exposed power-up spawns extra monsters</strong> &mdash; bad idea.
+                Reinforced bricks (stage 50+) take <strong>two hits</strong> to break.
+            </p>
+        </section>
+
+        <section class="legend">
+            <h3>Stages</h3>
+            <p style="margin:0;color:var(--muted);font-size:13px;line-height:1.6;">
+                25 stages with rising difficulty. Every 3rd stage is a <strong style="color:var(--accent-2)">BONUS round</strong> &mdash;
+                30 seconds to bomb as many monsters as possible for huge points.
+                Every 5th stage is a <strong style="color:var(--accent)">BOSS</strong> with new tricks.
+                Build a kill streak to multiply your score; your best run is saved on this device.
+            </p>
+        </section>
+    </div>
+
+    <script src="game.js"></script>
+</body>
+</html>

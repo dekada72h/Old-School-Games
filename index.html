@@ -1,0 +1,575 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Old School Games — a retro arcade revival. Play classic 80s and 90s games right in your browser. No installs, no ads, just nostalgia.">
+    <meta name="theme-color" content="#0a0617">
+    <meta property="og:title" content="Old School Games — Retro Arcade Revival">
+    <meta property="og:description" content="Play classic arcade games in your browser. No installs, just pure 80s/90s vibes.">
+    <meta property="og:type" content="website">
+
+    <title>Old School Games — Retro Arcade Revival</title>
+
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='12' fill='%231a0830'/%3E%3Ctext x='50%25' y='58%25' text-anchor='middle' font-family='monospace' font-size='40' font-weight='bold' fill='%23ff2e63'%3E%E2%96%B2%3C/text%3E%3C/svg%3E">
+
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=Inter:wght@400;500;600;700;800;900&family=Orbitron:wght@500;700;900&display=swap" rel="stylesheet">
+
+    <script src="https://cdn.tailwindcss.com?plugins=forms,typography"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        bg: { 900: '#05030f', 800: '#0a0617', 700: '#120a26', 600: '#1a0830' },
+                        neon: {
+                            pink: '#ff2e63',
+                            cyan: '#5fd0ff',
+                            green: '#36e3a4',
+                            yellow: '#ffd06b',
+                            purple: '#9b6bff',
+                            magenta: '#ff66cc'
+                        }
+                    },
+                    fontFamily: {
+                        pixel: ['"Press Start 2P"', 'monospace'],
+                        display: ['Orbitron', 'sans-serif'],
+                        sans: ['Inter', 'system-ui', 'sans-serif']
+                    },
+                    animation: {
+                        'float-slow': 'float 8s ease-in-out infinite',
+                        'pulse-slow': 'pulse 4s ease-in-out infinite',
+                        'glitch': 'glitch 3.5s infinite',
+                        'scan': 'scan 8s linear infinite',
+                        'shimmer': 'shimmer 3s linear infinite'
+                    }
+                }
+            }
+        };
+    </script>
+
+    <link rel="stylesheet" href="assets/css/styles.css">
+</head>
+<body class="bg-bg-800 text-slate-100 font-sans antialiased overflow-x-hidden">
+
+    <!-- Animated star field canvas -->
+    <canvas id="starfield" aria-hidden="true"></canvas>
+
+    <!-- CRT scanline overlay -->
+    <div class="scanlines" aria-hidden="true"></div>
+    <div class="vignette" aria-hidden="true"></div>
+
+    <!-- Navigation -->
+    <nav class="fixed top-0 inset-x-0 z-50 transition-all duration-300" id="nav">
+        <div class="max-w-7xl mx-auto px-6 py-4 flex items-center justify-between">
+            <a href="#top" class="flex items-center gap-3 group">
+                <span class="logo-mark">
+                    <span class="logo-mark-inner"></span>
+                </span>
+                <span class="font-pixel text-xs text-white tracking-widest hidden sm:block">OLD<span class="text-neon-pink">.</span>SCHOOL</span>
+            </a>
+            <div class="hidden md:flex items-center gap-8 text-sm font-medium">
+                <a href="#arcade" class="nav-link">Arcade</a>
+                <a href="#features" class="nav-link">Why</a>
+                <a href="#about" class="nav-link">About</a>
+                <a href="https://github.com/dekada72h/Old-School-Games" target="_blank" rel="noopener" class="nav-link flex items-center gap-2">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M12 .5C5.65.5.5 5.65.5 12c0 5.08 3.29 9.39 7.86 10.91.58.11.79-.25.79-.56 0-.27-.01-1-.02-1.96-3.2.69-3.87-1.54-3.87-1.54-.52-1.33-1.27-1.69-1.27-1.69-1.04-.71.08-.7.08-.7 1.15.08 1.76 1.18 1.76 1.18 1.02 1.76 2.69 1.25 3.34.95.1-.74.4-1.25.72-1.54-2.55-.29-5.24-1.28-5.24-5.69 0-1.26.45-2.29 1.18-3.09-.12-.29-.51-1.46.11-3.05 0 0 .97-.31 3.18 1.18a11 11 0 0 1 5.79 0c2.21-1.49 3.18-1.18 3.18-1.18.62 1.59.23 2.76.11 3.05.74.8 1.18 1.83 1.18 3.09 0 4.42-2.69 5.4-5.25 5.68.41.36.78 1.06.78 2.13 0 1.54-.01 2.78-.01 3.16 0 .31.21.68.79.56C20.21 21.39 23.5 17.08 23.5 12 23.5 5.65 18.35.5 12 .5z"/></svg>
+                    <span>GitHub</span>
+                </a>
+            </div>
+            <a href="#arcade" class="md:hidden btn-ghost text-xs px-3 py-2">PLAY</a>
+        </div>
+    </nav>
+
+    <main id="top">
+
+        <!-- Hero -->
+        <section class="hero relative min-h-screen flex items-center justify-center overflow-hidden pt-24 pb-16">
+            <div class="hero-glow" aria-hidden="true"></div>
+            <div class="grid-floor" aria-hidden="true"></div>
+
+            <div class="relative z-10 max-w-6xl mx-auto px-6 text-center">
+
+                <div class="hero-tag mb-8 inline-flex items-center gap-2 px-4 py-2 rounded-full">
+                    <span class="dot"></span>
+                    <span class="font-pixel text-[10px] tracking-[0.25em] text-neon-cyan">PRESS&nbsp;START&nbsp;TO&nbsp;CONTINUE</span>
+                </div>
+
+                <h1 class="hero-title font-pixel uppercase leading-none mb-4" data-text="OLD SCHOOL">
+                    <span class="block hero-title-row text-white">OLD<span class="text-neon-pink">.</span>SCHOOL</span>
+                    <span class="block hero-title-row hero-title-accent mt-3">GAMES</span>
+                </h1>
+
+                <p class="text-lg sm:text-xl md:text-2xl text-slate-300 max-w-2xl mx-auto leading-relaxed mb-10 font-light">
+                    A modern revival of the arcade you grew up with.<br>
+                    <span class="text-slate-400">No installs. No ads. Just <span class="text-neon-yellow font-medium">pure pixel chaos</span> in your browser.</span>
+                </p>
+
+                <div class="flex flex-col sm:flex-row items-center justify-center gap-4 mb-12">
+                    <a href="bomberman/" class="btn-primary group">
+                        <span class="relative z-10 flex items-center gap-3">
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
+                            PLAY NOW
+                        </span>
+                    </a>
+                    <a href="#arcade" class="btn-ghost">
+                        <span class="flex items-center gap-2">Browse Arcade
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M5 12h14m-7-7l7 7-7 7"/></svg>
+                        </span>
+                    </a>
+                </div>
+
+                <!-- Stat row -->
+                <div class="hero-stats grid grid-cols-3 gap-3 sm:gap-8 max-w-2xl mx-auto">
+                    <div class="stat">
+                        <div class="stat-value" data-counter="1">0</div>
+                        <div class="stat-label">PLAYABLE</div>
+                    </div>
+                    <div class="stat">
+                        <div class="stat-value" data-counter="100">0</div>
+                        <div class="stat-label">STAGES</div>
+                    </div>
+                    <div class="stat">
+                        <div class="stat-value">∞</div>
+                        <div class="stat-label">REPLAYS</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Scroll cue -->
+            <div class="scroll-cue" aria-hidden="true">
+                <div class="scroll-cue-line"></div>
+                <span class="font-pixel text-[9px] tracking-widest text-slate-500">SCROLL</span>
+            </div>
+        </section>
+
+        <!-- Arcade -->
+        <section id="arcade" class="relative py-24 sm:py-32">
+            <div class="max-w-7xl mx-auto px-6">
+                <div class="text-center mb-16">
+                    <div class="section-eyebrow">// ARCADE //</div>
+                    <h2 class="section-title">Pick your <span class="text-neon-pink">poison</span>.</h2>
+                    <p class="section-sub">One game live. More dropping into the cabinet soon.</p>
+                </div>
+
+                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+
+                    <!-- Bomb Blitz (live) -->
+                    <a href="bomberman/" class="game-card game-card--live md:col-span-2 lg:col-span-2 lg:row-span-2" data-tilt>
+                        <div class="game-card-art game-card-art--bomb">
+                            <!-- Pixel-art bomb scene rendered via inline SVG -->
+                            <svg viewBox="0 0 200 200" class="absolute inset-0 w-full h-full" preserveAspectRatio="xMidYMid slice">
+                                <defs>
+                                    <pattern id="grid" width="20" height="20" patternUnits="userSpaceOnUse">
+                                        <path d="M20 0H0V20" fill="none" stroke="rgba(255,46,99,0.08)" stroke-width="1"/>
+                                    </pattern>
+                                    <radialGradient id="bombGlow">
+                                        <stop offset="0%" stop-color="#ff2e63" stop-opacity="0.6"/>
+                                        <stop offset="100%" stop-color="#ff2e63" stop-opacity="0"/>
+                                    </radialGradient>
+                                </defs>
+                                <rect width="200" height="200" fill="url(#grid)"/>
+                                <circle cx="100" cy="120" r="80" fill="url(#bombGlow)"/>
+                                <!-- Bomb -->
+                                <g transform="translate(100,120)">
+                                    <circle r="36" fill="#0a0617" stroke="#ff2e63" stroke-width="3"/>
+                                    <circle r="36" fill="#0a0617"/>
+                                    <circle cx="-10" cy="-12" r="8" fill="#ff2e63" opacity="0.7"/>
+                                    <rect x="-3" y="-44" width="6" height="14" fill="#ff2e63"/>
+                                    <circle cx="0" cy="-50" r="4" fill="#ffd06b"/>
+                                    <circle cx="0" cy="-50" r="8" fill="#ffd06b" opacity="0.4">
+                                        <animate attributeName="r" values="6;10;6" dur="0.8s" repeatCount="indefinite"/>
+                                    </circle>
+                                </g>
+                                <!-- Brick blocks -->
+                                <g fill="#9b6bff" opacity="0.4">
+                                    <rect x="20" y="60" width="20" height="20"/>
+                                    <rect x="160" y="40" width="20" height="20"/>
+                                    <rect x="40" y="160" width="20" height="20"/>
+                                </g>
+                            </svg>
+                            <div class="game-card-shine"></div>
+                        </div>
+
+                        <div class="game-card-body">
+                            <div class="flex items-center justify-between mb-3">
+                                <span class="badge badge-live">
+                                    <span class="badge-dot"></span> LIVE
+                                </span>
+                                <span class="font-pixel text-[9px] text-slate-500">v1.0</span>
+                            </div>
+                            <h3 class="game-card-title">Bomb Blitz</h3>
+                            <p class="game-card-desc">A Bomberman-style frenzy. 100 stages, 7 monster types, 10 power-ups, boss fights every 5 levels. Plays on keyboard or touch.</p>
+                            <div class="flex flex-wrap gap-2 mt-4">
+                                <span class="chip">HTML5 Canvas</span>
+                                <span class="chip">Single-player</span>
+                                <span class="chip">Mobile-friendly</span>
+                            </div>
+                            <div class="game-card-cta">
+                                <span class="btn-primary btn-primary--sm">
+                                    <span class="relative z-10 flex items-center gap-2">
+                                        PLAY
+                                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M5 12h14m-7-7l7 7-7 7"/></svg>
+                                    </span>
+                                </span>
+                            </div>
+                        </div>
+                    </a>
+
+                    <!-- Snake (coming soon) -->
+                    <div class="game-card game-card--soon" data-tilt>
+                        <div class="game-card-art game-card-art--snake">
+                            <svg viewBox="0 0 200 200" class="absolute inset-0 w-full h-full" preserveAspectRatio="xMidYMid slice">
+                                <rect width="200" height="200" fill="url(#grid)"/>
+                                <g fill="#36e3a4">
+                                    <rect x="40" y="100" width="16" height="16" rx="2"/>
+                                    <rect x="58" y="100" width="16" height="16" rx="2" opacity="0.85"/>
+                                    <rect x="76" y="100" width="16" height="16" rx="2" opacity="0.7"/>
+                                    <rect x="94" y="100" width="16" height="16" rx="2" opacity="0.55"/>
+                                    <rect x="112" y="100" width="16" height="16" rx="2" opacity="0.4"/>
+                                    <rect x="130" y="100" width="16" height="16" rx="2" opacity="0.25"/>
+                                </g>
+                                <circle cx="48" cy="108" r="2" fill="#0a0617"/>
+                                <rect x="100" y="50" width="14" height="14" rx="3" fill="#ff2e63"/>
+                            </svg>
+                        </div>
+                        <div class="game-card-body">
+                            <div class="flex items-center justify-between mb-3">
+                                <span class="badge badge-soon">SOON</span>
+                                <span class="font-pixel text-[9px] text-slate-500">~Q3</span>
+                            </div>
+                            <h3 class="game-card-title">Slither</h3>
+                            <p class="game-card-desc text-sm">The classic Snake reborn — wrap mode, speed scaling, daily seeds.</p>
+                        </div>
+                    </div>
+
+                    <!-- Tetris (coming soon) -->
+                    <div class="game-card game-card--soon" data-tilt>
+                        <div class="game-card-art game-card-art--tetris">
+                            <svg viewBox="0 0 200 200" class="absolute inset-0 w-full h-full" preserveAspectRatio="xMidYMid slice">
+                                <rect width="200" height="200" fill="url(#grid)"/>
+                                <g>
+                                    <rect x="60" y="40" width="20" height="20" fill="#5fd0ff"/>
+                                    <rect x="80" y="40" width="20" height="20" fill="#5fd0ff"/>
+                                    <rect x="100" y="40" width="20" height="20" fill="#5fd0ff"/>
+                                    <rect x="120" y="40" width="20" height="20" fill="#5fd0ff"/>
+
+                                    <rect x="60" y="80" width="20" height="20" fill="#ffd06b"/>
+                                    <rect x="80" y="80" width="20" height="20" fill="#ffd06b"/>
+                                    <rect x="60" y="100" width="20" height="20" fill="#ffd06b"/>
+                                    <rect x="80" y="100" width="20" height="20" fill="#ffd06b"/>
+
+                                    <rect x="120" y="100" width="20" height="20" fill="#9b6bff"/>
+                                    <rect x="140" y="100" width="20" height="20" fill="#9b6bff"/>
+                                    <rect x="100" y="120" width="20" height="20" fill="#9b6bff"/>
+                                    <rect x="120" y="120" width="20" height="20" fill="#9b6bff"/>
+
+                                    <rect x="60" y="140" width="20" height="20" fill="#ff2e63"/>
+                                    <rect x="80" y="140" width="20" height="20" fill="#ff2e63"/>
+                                    <rect x="100" y="140" width="20" height="20" fill="#ff2e63"/>
+                                    <rect x="80" y="160" width="20" height="20" fill="#ff2e63"/>
+                                </g>
+                            </svg>
+                        </div>
+                        <div class="game-card-body">
+                            <div class="flex items-center justify-between mb-3">
+                                <span class="badge badge-soon">SOON</span>
+                                <span class="font-pixel text-[9px] text-slate-500">~Q3</span>
+                            </div>
+                            <h3 class="game-card-title">Block Drop</h3>
+                            <p class="game-card-desc text-sm">Falling tetrominoes, 7-bag randomizer, T-spins, hold piece.</p>
+                        </div>
+                    </div>
+
+                    <!-- Pacman (coming soon) -->
+                    <div class="game-card game-card--soon" data-tilt>
+                        <div class="game-card-art game-card-art--pac">
+                            <svg viewBox="0 0 200 200" class="absolute inset-0 w-full h-full" preserveAspectRatio="xMidYMid slice">
+                                <rect width="200" height="200" fill="url(#grid)"/>
+                                <g fill="#5fd0ff" opacity="0.6">
+                                    <rect x="20" y="20" width="160" height="4"/>
+                                    <rect x="20" y="20" width="4" height="60"/>
+                                    <rect x="176" y="20" width="4" height="60"/>
+                                    <rect x="20" y="176" width="160" height="4"/>
+                                    <rect x="20" y="120" width="4" height="60"/>
+                                    <rect x="176" y="120" width="4" height="60"/>
+                                </g>
+                                <!-- Dots -->
+                                <g fill="#ffd06b">
+                                    <circle cx="60" cy="100" r="3"/>
+                                    <circle cx="80" cy="100" r="3"/>
+                                    <circle cx="100" cy="100" r="3"/>
+                                    <circle cx="120" cy="100" r="3"/>
+                                </g>
+                                <!-- Pacman -->
+                                <g transform="translate(50,100)">
+                                    <path d="M0,0 L24,-14 A28,28 0 1 0 24,14 Z" fill="#ffd06b"/>
+                                </g>
+                                <!-- Ghost -->
+                                <g transform="translate(150,100)">
+                                    <path d="M-16,8 L-16,-12 A16,16 0 0 1 16,-12 L16,8 L12,4 L8,8 L4,4 L0,8 L-4,4 L-8,8 L-12,4 Z" fill="#ff2e63"/>
+                                    <circle cx="-6" cy="-6" r="3" fill="#fff"/>
+                                    <circle cx="6" cy="-6" r="3" fill="#fff"/>
+                                    <circle cx="-6" cy="-6" r="1.5" fill="#0a0617"/>
+                                    <circle cx="6" cy="-6" r="1.5" fill="#0a0617"/>
+                                </g>
+                            </svg>
+                        </div>
+                        <div class="game-card-body">
+                            <div class="flex items-center justify-between mb-3">
+                                <span class="badge badge-soon">SOON</span>
+                                <span class="font-pixel text-[9px] text-slate-500">~Q4</span>
+                            </div>
+                            <h3 class="game-card-title">Pellet Chase</h3>
+                            <p class="game-card-desc text-sm">Maze navigation, four ghosts with personalities, fruit bonuses.</p>
+                        </div>
+                    </div>
+
+                    <!-- Space Invaders -->
+                    <div class="game-card game-card--soon" data-tilt>
+                        <div class="game-card-art game-card-art--invaders">
+                            <svg viewBox="0 0 200 200" class="absolute inset-0 w-full h-full" preserveAspectRatio="xMidYMid slice">
+                                <rect width="200" height="200" fill="url(#grid)"/>
+                                <g fill="#36e3a4">
+                                    <!-- Invader 1 -->
+                                    <g transform="translate(40,40)">
+                                        <rect x="6" y="0" width="4" height="4"/><rect x="22" y="0" width="4" height="4"/>
+                                        <rect x="2" y="4" width="4" height="4"/><rect x="26" y="4" width="4" height="4"/>
+                                        <rect x="2" y="8" width="28" height="4"/>
+                                        <rect x="0" y="12" width="4" height="4"/><rect x="8" y="12" width="4" height="4"/><rect x="20" y="12" width="4" height="4"/><rect x="28" y="12" width="4" height="4"/>
+                                        <rect x="0" y="16" width="32" height="4"/>
+                                        <rect x="6" y="20" width="4" height="4"/><rect x="22" y="20" width="4" height="4"/>
+                                    </g>
+                                    <g transform="translate(120,40)" fill="#ff66cc">
+                                        <rect x="6" y="0" width="4" height="4"/><rect x="22" y="0" width="4" height="4"/>
+                                        <rect x="2" y="4" width="4" height="4"/><rect x="26" y="4" width="4" height="4"/>
+                                        <rect x="2" y="8" width="28" height="4"/>
+                                        <rect x="0" y="12" width="4" height="4"/><rect x="8" y="12" width="4" height="4"/><rect x="20" y="12" width="4" height="4"/><rect x="28" y="12" width="4" height="4"/>
+                                        <rect x="0" y="16" width="32" height="4"/>
+                                        <rect x="6" y="20" width="4" height="4"/><rect x="22" y="20" width="4" height="4"/>
+                                    </g>
+                                </g>
+                                <!-- Player ship -->
+                                <g transform="translate(80,150)" fill="#5fd0ff">
+                                    <rect x="14" y="0" width="4" height="4"/>
+                                    <rect x="10" y="4" width="12" height="4"/>
+                                    <rect x="0" y="8" width="32" height="8"/>
+                                </g>
+                                <rect x="98" y="100" width="2" height="20" fill="#ffd06b"/>
+                            </svg>
+                        </div>
+                        <div class="game-card-body">
+                            <div class="flex items-center justify-between mb-3">
+                                <span class="badge badge-soon">SOON</span>
+                                <span class="font-pixel text-[9px] text-slate-500">~Q4</span>
+                            </div>
+                            <h3 class="game-card-title">Star Defender</h3>
+                            <p class="game-card-desc text-sm">Endless waves, mothership bonuses, screen-shake galore.</p>
+                        </div>
+                    </div>
+
+                    <!-- Pong / Breakout -->
+                    <div class="game-card game-card--soon" data-tilt>
+                        <div class="game-card-art game-card-art--breakout">
+                            <svg viewBox="0 0 200 200" class="absolute inset-0 w-full h-full" preserveAspectRatio="xMidYMid slice">
+                                <rect width="200" height="200" fill="url(#grid)"/>
+                                <g>
+                                    <rect x="30" y="30" width="28" height="10" fill="#ff2e63"/>
+                                    <rect x="62" y="30" width="28" height="10" fill="#ffd06b"/>
+                                    <rect x="94" y="30" width="28" height="10" fill="#36e3a4"/>
+                                    <rect x="126" y="30" width="28" height="10" fill="#5fd0ff"/>
+                                    <rect x="30" y="44" width="28" height="10" fill="#ffd06b"/>
+                                    <rect x="62" y="44" width="28" height="10" fill="#36e3a4"/>
+                                    <rect x="94" y="44" width="28" height="10" fill="#5fd0ff"/>
+                                    <rect x="126" y="44" width="28" height="10" fill="#9b6bff"/>
+                                    <rect x="30" y="58" width="28" height="10" fill="#36e3a4"/>
+                                    <rect x="62" y="58" width="28" height="10" fill="#5fd0ff"/>
+                                    <rect x="94" y="58" width="28" height="10" fill="#9b6bff"/>
+                                    <rect x="126" y="58" width="28" height="10" fill="#ff66cc"/>
+                                </g>
+                                <circle cx="100" cy="120" r="6" fill="#fff"/>
+                                <rect x="74" y="170" width="52" height="8" rx="2" fill="#5fd0ff"/>
+                            </svg>
+                        </div>
+                        <div class="game-card-body">
+                            <div class="flex items-center justify-between mb-3">
+                                <span class="badge badge-soon">SOON</span>
+                                <span class="font-pixel text-[9px] text-slate-500">~2027</span>
+                            </div>
+                            <h3 class="game-card-title">Brick Smash</h3>
+                            <p class="game-card-desc text-sm">Breakout meets pinball physics. 50 hand-built layouts.</p>
+                        </div>
+                    </div>
+
+                    <!-- Suggestion / community card -->
+                    <div class="game-card game-card--ghost md:col-span-2 lg:col-span-3 lg:col-start-1">
+                        <div class="game-card-body flex flex-col sm:flex-row items-center justify-between gap-6 py-8">
+                            <div>
+                                <div class="font-pixel text-[10px] text-neon-cyan mb-2 tracking-widest">// REQUEST A GAME //</div>
+                                <h3 class="text-xl font-display font-bold text-white">Got a classic you'd kill to see here?</h3>
+                                <p class="text-slate-400 text-sm mt-1">Frogger, Galaga, Pong, Asteroids, Donkey Kong... open an issue and it might land in the cabinet.</p>
+                            </div>
+                            <a href="https://github.com/dekada72h/Old-School-Games/issues/new" target="_blank" rel="noopener" class="btn-ghost shrink-0">
+                                Suggest a Game
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" class="ml-2 inline"><path d="M7 17L17 7M7 7h10v10"/></svg>
+                            </a>
+                        </div>
+                    </div>
+
+                </div>
+            </div>
+        </section>
+
+        <!-- Features -->
+        <section id="features" class="relative py-24 sm:py-32">
+            <div class="max-w-7xl mx-auto px-6">
+                <div class="text-center mb-16">
+                    <div class="section-eyebrow">// WHY //</div>
+                    <h2 class="section-title">Built for <span class="text-neon-cyan">the lobby</span>, not the launcher.</h2>
+                </div>
+
+                <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                    <div class="feature-card">
+                        <div class="feature-icon" style="--c:#ff2e63">
+                            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>
+                        </div>
+                        <h3 class="feature-title">Zero install</h3>
+                        <p class="feature-desc">Open the link, hit play. No accounts, no downloads, no launchers.</p>
+                    </div>
+                    <div class="feature-card">
+                        <div class="feature-icon" style="--c:#5fd0ff">
+                            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="6" width="20" height="12" rx="2"/><path d="M6 12h4M14 10h.01M18 10h.01M14 14h.01M18 14h.01"/></svg>
+                        </div>
+                        <h3 class="feature-title">Plays everywhere</h3>
+                        <p class="feature-desc">Keyboard on PC. On-screen D-pad on mobile and tablet. Same game.</p>
+                    </div>
+                    <div class="feature-card">
+                        <div class="feature-icon" style="--c:#ffd06b">
+                            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+                        </div>
+                        <h3 class="feature-title">Loads in &lt; 1s</h3>
+                        <p class="feature-desc">Pure HTML5 + canvas. No frameworks, no megabytes, no spinner.</p>
+                    </div>
+                    <div class="feature-card">
+                        <div class="feature-icon" style="--c:#36e3a4">
+                            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 11H5a2 2 0 00-2 2v7a2 2 0 002 2h14a2 2 0 002-2v-7a2 2 0 00-2-2h-4"/><polyline points="9 11 12 14 15 11"/><line x1="12" y1="2" x2="12" y2="14"/></svg>
+                        </div>
+                        <h3 class="feature-title">Free forever</h3>
+                        <p class="feature-desc">MIT licensed, open source. Fork it, mod it, host your own arcade.</p>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Featured promo -->
+        <section class="relative py-24 sm:py-32">
+            <div class="max-w-7xl mx-auto px-6">
+                <div class="featured-banner">
+                    <div class="featured-content">
+                        <div class="font-pixel text-[10px] text-neon-pink tracking-widest mb-3">// FEATURED //</div>
+                        <h2 class="text-4xl sm:text-5xl lg:text-6xl font-display font-black text-white leading-tight mb-4">
+                            Drop bombs.<br>
+                            <span class="text-neon-pink">Blast bricks.</span><br>
+                            <span class="text-slate-400">Survive the swarm.</span>
+                        </h2>
+                        <p class="text-slate-300 text-lg max-w-md mb-8">
+                            <strong class="text-white">Bomb Blitz</strong> is our flagship cabinet — a 100-stage Bomberman remake with bosses, bonus rounds, 10 power-ups, and a kill-streak combo system that's stupidly addictive.
+                        </p>
+                        <div class="flex items-center gap-4 flex-wrap">
+                            <a href="bomberman/" class="btn-primary">
+                                <span class="relative z-10 flex items-center gap-2">
+                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>
+                                    PLAY BOMB BLITZ
+                                </span>
+                            </a>
+                            <a href="bomberman/README.md" class="btn-ghost text-sm">Read the manual</a>
+                        </div>
+                    </div>
+                    <div class="featured-art">
+                        <div class="cabinet">
+                            <div class="cabinet-screen">
+                                <div class="cabinet-pixels">
+                                    <span></span><span></span><span></span><span></span><span></span>
+                                    <span></span><span></span><span></span><span></span><span></span>
+                                    <span></span><span></span><span></span><span></span><span></span>
+                                    <span></span><span></span><span></span><span></span><span></span>
+                                    <span></span><span></span><span></span><span></span><span></span>
+                                </div>
+                                <div class="cabinet-text font-pixel">PLAYER 1</div>
+                            </div>
+                            <div class="cabinet-controls">
+                                <div class="cabinet-stick"></div>
+                                <div class="cabinet-button cabinet-button--a"></div>
+                                <div class="cabinet-button cabinet-button--b"></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- About -->
+        <section id="about" class="relative py-24 sm:py-32">
+            <div class="max-w-3xl mx-auto px-6 text-center">
+                <div class="section-eyebrow">// ABOUT //</div>
+                <h2 class="section-title">A love letter to <span class="text-neon-yellow">25¢</span> nostalgia.</h2>
+                <p class="text-slate-300 text-lg leading-relaxed mb-6">
+                    Old School Games is a growing collection of browser remakes paying tribute to the arcade and home-computer classics — Bomberman, Snake, Tetris, Pac-Man, Space Invaders, and more to come.
+                </p>
+                <p class="text-slate-400 leading-relaxed mb-10">
+                    Every game is hand-built from scratch in pure HTML5 + canvas + vanilla JS. No engines, no trackers, no in-app purchases. Just the same games you played in the 80s and 90s — running natively in any modern browser, no install required.
+                </p>
+                <div class="flex flex-wrap items-center justify-center gap-3">
+                    <a href="https://github.com/dekada72h/Old-School-Games" target="_blank" rel="noopener" class="btn-ghost">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" class="mr-2 inline"><path d="M12 .5C5.65.5.5 5.65.5 12c0 5.08 3.29 9.39 7.86 10.91.58.11.79-.25.79-.56 0-.27-.01-1-.02-1.96-3.2.69-3.87-1.54-3.87-1.54-.52-1.33-1.27-1.69-1.27-1.69-1.04-.71.08-.7.08-.7 1.15.08 1.76 1.18 1.76 1.18 1.02 1.76 2.69 1.25 3.34.95.1-.74.4-1.25.72-1.54-2.55-.29-5.24-1.28-5.24-5.69 0-1.26.45-2.29 1.18-3.09-.12-.29-.51-1.46.11-3.05 0 0 .97-.31 3.18 1.18a11 11 0 0 1 5.79 0c2.21-1.49 3.18-1.18 3.18-1.18.62 1.59.23 2.76.11 3.05.74.8 1.18 1.83 1.18 3.09 0 4.42-2.69 5.4-5.25 5.68.41.36.78 1.06.78 2.13 0 1.54-.01 2.78-.01 3.16 0 .31.21.68.79.56C20.21 21.39 23.5 17.08 23.5 12 23.5 5.65 18.35.5 12 .5z"/></svg>
+                        Source on GitHub
+                    </a>
+                    <span class="text-slate-600 hidden sm:inline">·</span>
+                    <span class="text-slate-500 text-sm font-pixel tracking-widest">MIT LICENSED</span>
+                </div>
+            </div>
+        </section>
+
+        <!-- Easter egg hint -->
+        <section class="relative py-12">
+            <div class="max-w-3xl mx-auto px-6 text-center">
+                <p class="font-pixel text-[10px] text-slate-600 tracking-widest">↑ ↑ ↓ ↓ ← → ← → B A</p>
+            </div>
+        </section>
+
+    </main>
+
+    <!-- Footer -->
+    <footer class="relative border-t border-white/5 py-10 mt-12">
+        <div class="max-w-7xl mx-auto px-6 flex flex-col sm:flex-row items-center justify-between gap-4 text-xs text-slate-500">
+            <div class="flex items-center gap-3">
+                <span class="logo-mark logo-mark--sm">
+                    <span class="logo-mark-inner"></span>
+                </span>
+                <span class="font-pixel tracking-widest">OLD<span class="text-neon-pink">.</span>SCHOOL<span class="text-slate-700">.GAMES</span></span>
+            </div>
+            <div class="flex items-center gap-6">
+                <a href="#arcade" class="hover:text-white transition">Arcade</a>
+                <a href="#about" class="hover:text-white transition">About</a>
+                <a href="https://github.com/dekada72h/Old-School-Games" target="_blank" rel="noopener" class="hover:text-white transition">GitHub</a>
+            </div>
+            <div class="text-slate-600">© <span id="year">2026</span> · MIT</div>
+        </div>
+    </footer>
+
+    <!-- Konami easter egg overlay -->
+    <div id="konami-overlay" class="konami-overlay hidden" aria-hidden="true">
+        <div class="konami-panel">
+            <div class="font-pixel text-neon-pink text-2xl mb-3">CHEAT&nbsp;UNLOCKED</div>
+            <div class="font-pixel text-xs text-neon-cyan tracking-widest mb-6">+30&nbsp;LIVES&nbsp;·&nbsp;GOD&nbsp;MODE</div>
+            <div class="text-slate-400 text-sm">Just kidding — but you remembered the code. Respect.</div>
+            <button class="btn-ghost mt-6" id="konami-close">CLOSE</button>
+        </div>
+    </div>
+
+    <script src="assets/js/main.js"></script>
+</body>
+</html>
