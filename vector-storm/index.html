@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Vector Storm — Modern Asteroids Remake</title>
+    <meta name="description" content="A modern remake of Asteroids (Atari 1979). Inertia, splitting rocks, vector graphics, hyperspace.">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=Inter:wght@400;600;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="../assets/css/game-shell.css">
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="scanlines" aria-hidden="true"></div>
+
+    <div class="game-shell">
+        <header class="game-header">
+            <a href="../" class="back-link">&larr; ARCADE</a>
+            <h1 class="title">VECTOR <span class="title-accent">STORM</span></h1>
+            <div class="subtitle">A modern remake of Asteroids (Atari 1979) — vector-graphics chaos in space</div>
+        </header>
+
+        <div class="game-frame">
+            <canvas id="game" width="720" height="640"></canvas>
+
+            <div class="touch-controls" aria-hidden="true">
+                <div class="dpad" style="width:auto;height:auto;display:flex;gap:10px;">
+                    <button class="dpad-btn" data-touch="left"   style="position:static;width:54px;height:54px;font-size:18px;">&larr;</button>
+                    <button class="dpad-btn" data-touch="thrust" style="position:static;width:54px;height:54px;font-size:14px;">THR</button>
+                    <button class="dpad-btn" data-touch="right"  style="position:static;width:54px;height:54px;font-size:18px;">&rarr;</button>
+                </div>
+                <div class="action-buttons">
+                    <button class="act-btn" data-touch="fire">FIRE</button>
+                    <button class="act-btn secondary" data-touch="hyperspace">HYP</button>
+                    <button class="act-btn secondary" data-touch="pause">II</button>
+                </div>
+            </div>
+
+            <div class="hud" style="grid-template-columns: repeat(4, 1fr);">
+                <div class="hud-cell"><span class="hud-label">SCORE</span><span class="hud-value" id="score">0</span></div>
+                <div class="hud-cell"><span class="hud-label">LIVES</span><span class="hud-value" id="lives">3</span></div>
+                <div class="hud-cell"><span class="hud-label">WAVE</span><span class="hud-value" id="wave">1</span></div>
+                <div class="hud-cell"><span class="hud-label">BEST</span><span class="hud-value accent" id="best">0</span></div>
+            </div>
+
+            <div class="overlay" id="overlay-title">
+                <div class="panel">
+                    <h2>VECTOR STORM</h2>
+                    <p class="tag">Out here, no one can hear you wraparound.</p>
+                    <div class="how">
+                        <div class="how-row"><span class="key">A&nbsp;D</span> or <span class="key">&larr;&rarr;</span> &mdash; rotate</div>
+                        <div class="how-row"><span class="key">W</span> or <span class="key">&uarr;</span> &mdash; thrust</div>
+                        <div class="how-row"><span class="key">Space</span> &mdash; fire</div>
+                        <div class="how-row"><span class="key">Shift</span> &mdash; hyperspace (risky)</div>
+                        <div class="how-row"><span class="key">P</span> pause &middot; <span class="key">R</span> restart</div>
+                    </div>
+                    <button class="btn-play" id="btn-play">PLAY</button>
+                </div>
+            </div>
+
+            <div class="overlay hidden" id="overlay-pause">
+                <div class="panel">
+                    <h2>PAUSED</h2>
+                    <button class="btn-play" id="btn-resume">RESUME</button>
+                </div>
+            </div>
+
+            <div class="overlay hidden" id="overlay-gameover">
+                <div class="panel">
+                    <h2>GAME OVER</h2>
+                    <p class="tag">Final score: <span id="final-score">0</span> · wave <span id="final-wave">0</span></p>
+                    <button class="btn-play" id="btn-retry">TRY AGAIN</button>
+                </div>
+            </div>
+        </div>
+
+        <section class="legend">
+            <h3>Targets</h3>
+            <ul class="hs-list">
+                <li><span class="hs-cat">LARGE ROCK</span><span class="hs-val">20 pts</span></li>
+                <li><span class="hs-cat">MEDIUM ROCK</span><span class="hs-val">50 pts</span></li>
+                <li><span class="hs-cat">SMALL ROCK</span><span class="hs-val">100 pts</span></li>
+                <li><span class="hs-cat">SAUCER (BIG)</span><span class="hs-val">200 pts</span></li>
+                <li><span class="hs-cat">SAUCER (SMALL)</span><span class="hs-val">1000 pts</span></li>
+            </ul>
+        </section>
+
+        <section class="legend">
+            <h3>High Scores</h3>
+            <ul class="hs-list">
+                <li><span class="hs-cat">BEST SCORE</span><span class="hs-val" id="hs-score">0</span></li>
+                <li><span class="hs-cat">HIGHEST WAVE</span><span class="hs-val" id="hs-wave">0</span></li>
+            </ul>
+        </section>
+    </div>
+
+    <script src="game.js"></script>
+</body>
+</html>

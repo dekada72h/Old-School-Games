@@ -15,6 +15,9 @@ classics — no install, no ads, no trackers.
 | Pellet Chase   | Live     | Pac-Man          | `/pellet-chase/`    |
 | Star Defender  | Live     | Space Invaders   | `/star-defender/`   |
 | Brick Smash    | Live     | Breakout/Arkanoid| `/brick-smash/`     |
+| Volley         | Live     | Pong             | `/volley/`          |
+| Vector Storm   | Live     | Asteroids        | `/vector-storm/`    |
+| Lane Hopper    | Live     | Frogger          | `/lane-hopper/`     |
 
 Each game is fully self-contained — pure HTML5 canvas and vanilla JS.
 No build step, no framework, no megabytes.

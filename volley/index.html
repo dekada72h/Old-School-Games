@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Volley — Modern Pong Remake</title>
+    <meta name="description" content="A modern remake of Pong (Atari 1972). Player vs CPU, scaling speed, first to 11.">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=Inter:wght@400;600;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="../assets/css/game-shell.css">
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="scanlines" aria-hidden="true"></div>
+
+    <div class="game-shell">
+        <header class="game-header">
+            <a href="../" class="back-link">&larr; ARCADE</a>
+            <h1 class="title">VOL<span class="title-accent">LEY</span></h1>
+            <div class="subtitle">A modern remake of Pong (Atari 1972) — the one that started it all</div>
+        </header>
+
+        <div class="game-frame">
+            <canvas id="game" width="720" height="480"></canvas>
+
+            <div class="touch-controls" aria-hidden="true">
+                <div class="dpad" style="width:auto;height:auto;display:flex;flex-direction:column;gap:14px;">
+                    <button class="dpad-btn" data-touch="up"   style="position:static;width:60px;height:60px;font-size:22px;">&uarr;</button>
+                    <button class="dpad-btn" data-touch="down" style="position:static;width:60px;height:60px;font-size:22px;">&darr;</button>
+                </div>
+                <div class="action-buttons">
+                    <button class="act-btn secondary" data-touch="pause">II</button>
+                </div>
+            </div>
+
+            <div class="hud" style="grid-template-columns: repeat(4, 1fr);">
+                <div class="hud-cell"><span class="hud-label">YOU</span><span class="hud-value" id="score-p">0</span></div>
+                <div class="hud-cell"><span class="hud-label">CPU</span><span class="hud-value" id="score-c">0</span></div>
+                <div class="hud-cell"><span class="hud-label">RALLY</span><span class="hud-value" id="rally">0</span></div>
+                <div class="hud-cell"><span class="hud-label">BEST RALLY</span><span class="hud-value accent" id="best">0</span></div>
+            </div>
+
+            <div class="overlay" id="overlay-title">
+                <div class="panel">
+                    <h2>VOLLEY</h2>
+                    <p class="tag">First to 11. Don't blink.</p>
+                    <div class="how">
+                        <div class="how-row"><span class="key">W&nbsp;S</span> or <span class="key">&uarr;&darr;</span> &mdash; move paddle</div>
+                        <div class="how-row"><span class="key">Mouse</span> &mdash; paddle follows cursor</div>
+                        <div class="how-row"><span class="key">P</span> pause &middot; <span class="key">R</span> restart</div>
+                        <div class="how-row" style="margin-top:8px;">
+                            <label style="display:flex;align-items:center;gap:8px;cursor:pointer;">
+                                Difficulty:
+                                <select id="difficulty" style="background:rgba(255,255,255,0.06);border:1px solid rgba(255,255,255,0.1);color:#fff;padding:4px 8px;border-radius:4px;">
+                                    <option value="easy">Easy</option>
+                                    <option value="normal" selected>Normal</option>
+                                    <option value="hard">Hard</option>
+                                    <option value="impossible">Impossible</option>
+                                </select>
+                            </label>
+                        </div>
+                    </div>
+                    <button class="btn-play" id="btn-play">PLAY</button>
+                </div>
+            </div>
+
+            <div class="overlay hidden" id="overlay-pause">
+                <div class="panel">
+                    <h2>PAUSED</h2>
+                    <button class="btn-play" id="btn-resume">RESUME</button>
+                </div>
+            </div>
+
+            <div class="overlay hidden" id="overlay-end">
+                <div class="panel">
+                    <h2 id="end-title">YOU WIN!</h2>
+                    <p class="tag" id="end-tag">11 - 0 · best rally: 0</p>
+                    <button class="btn-play" id="btn-retry">PLAY AGAIN</button>
+                </div>
+            </div>
+        </div>
+
+        <section class="legend">
+            <h3>How it works</h3>
+            <p style="margin:0;color:var(--muted);font-size:13px;line-height:1.6;">
+                Hit the ball with the side of your paddle — the contact angle bends the ball.
+                The ball <strong>speeds up with each rally</strong> and resets after every point.
+                CPU's reaction time and tracking accuracy depend on difficulty.
+            </p>
+        </section>
+
+        <section class="legend">
+            <h3>High Scores</h3>
+            <ul class="hs-list">
+                <li><span class="hs-cat">BEST RALLY</span><span class="hs-val" id="hs-rally">0</span></li>
+                <li><span class="hs-cat">WINS</span><span class="hs-val" id="hs-wins">0</span></li>
+            </ul>
+        </section>
+    </div>
+
+    <script src="game.js"></script>
+</body>
+</html>

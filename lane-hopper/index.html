@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Lane Hopper — Modern Frogger Remake</title>
+    <meta name="description" content="A modern remake of Frogger (Konami 1981). Hop traffic and ride logs to reach the lily pads.">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=Inter:wght@400;600;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="../assets/css/game-shell.css">
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="scanlines" aria-hidden="true"></div>
+
+    <div class="game-shell">
+        <header class="game-header">
+            <a href="../" class="back-link">&larr; ARCADE</a>
+            <h1 class="title">LANE <span class="title-accent">HOPPER</span></h1>
+            <div class="subtitle">A modern remake of Frogger (Konami 1981) — hop traffic, ride logs, fill the pads</div>
+        </header>
+
+        <div class="game-frame">
+            <canvas id="game" width="600" height="560"></canvas>
+
+            <div class="touch-controls" aria-hidden="true">
+                <div class="dpad">
+                    <button class="dpad-btn dpad-up"    data-touch="up">&uarr;</button>
+                    <button class="dpad-btn dpad-left"  data-touch="left">&larr;</button>
+                    <button class="dpad-btn dpad-right" data-touch="right">&rarr;</button>
+                    <button class="dpad-btn dpad-down"  data-touch="down">&darr;</button>
+                </div>
+                <div class="action-buttons">
+                    <button class="act-btn secondary" data-touch="pause">II</button>
+                </div>
+            </div>
+
+            <div class="hud" style="grid-template-columns: repeat(5, 1fr);">
+                <div class="hud-cell"><span class="hud-label">SCORE</span><span class="hud-value" id="score">0</span></div>
+                <div class="hud-cell"><span class="hud-label">LIVES</span><span class="hud-value" id="lives">3</span></div>
+                <div class="hud-cell"><span class="hud-label">LEVEL</span><span class="hud-value" id="level">1</span></div>
+                <div class="hud-cell"><span class="hud-label">TIME</span><span class="hud-value" id="time">30</span></div>
+                <div class="hud-cell"><span class="hud-label">BEST</span><span class="hud-value accent" id="best">0</span></div>
+            </div>
+
+            <div class="overlay" id="overlay-title">
+                <div class="panel">
+                    <h2>LANE HOPPER</h2>
+                    <p class="tag">Cross the road. Don't drown. Hit all 5 pads.</p>
+                    <div class="how">
+                        <div class="how-row"><span class="key">WASD</span> or <span class="key">&uarr;&darr;&larr;&rarr;</span> &mdash; hop one tile</div>
+                        <div class="how-row"><span class="key">P</span> pause &middot; <span class="key">R</span> restart</div>
+                        <div class="how-row" style="margin-top:8px;color:var(--muted)">Stand on <strong style="color:#c9722e">logs</strong> &amp; <strong style="color:#36e3a4">turtles</strong> to cross the river. Don't get carried off-screen.</div>
+                    </div>
+                    <button class="btn-play" id="btn-play">PLAY</button>
+                </div>
+            </div>
+
+            <div class="overlay hidden" id="overlay-pause">
+                <div class="panel">
+                    <h2>PAUSED</h2>
+                    <button class="btn-play" id="btn-resume">RESUME</button>
+                </div>
+            </div>
+
+            <div class="overlay hidden" id="overlay-level">
+                <div class="panel">
+                    <h2 id="level-title">LEVEL 1</h2>
+                    <p class="tag" id="level-tag">Hop to it...</p>
+                </div>
+            </div>
+
+            <div class="overlay hidden" id="overlay-gameover">
+                <div class="panel">
+                    <h2>GAME OVER</h2>
+                    <p class="tag">Final score: <span id="final-score">0</span></p>
+                    <button class="btn-play" id="btn-retry">TRY AGAIN</button>
+                </div>
+            </div>
+        </div>
+
+        <section class="legend">
+            <h3>Scoring</h3>
+            <ul class="hs-list">
+                <li><span class="hs-cat">FORWARD HOP</span><span class="hs-val">10 pts</span></li>
+                <li><span class="hs-cat">REACH PAD</span><span class="hs-val">50 pts</span></li>
+                <li><span class="hs-cat">TIME BONUS</span><span class="hs-val">10 / sec</span></li>
+                <li><span class="hs-cat">CLEAR LEVEL</span><span class="hs-val">1000 pts</span></li>
+            </ul>
+        </section>
+
+        <section class="legend">
+            <h3>High Scores</h3>
+            <ul class="hs-list">
+                <li><span class="hs-cat">BEST SCORE</span><span class="hs-val" id="hs-score">0</span></li>
+                <li><span class="hs-cat">HIGHEST LEVEL</span><span class="hs-val" id="hs-level">0</span></li>
+            </ul>
+        </section>
+    </div>
+
+    <script src="game.js"></script>
+</body>
+</html>
