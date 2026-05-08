@@ -3,8 +3,8 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Slither — Modern Snake Remake</title>
-    <meta name="description" content="A modern remake of the classic 1970s/Nokia Snake. Wrap mode, daily seeds, smooth pixel rendering. Plays in any browser.">
+    <title>Bug Crawl — Inspired by Centipede</title>
+    <meta name="description" content="A free fan tribute inspired by Centipede (Atari 1981). Mushroom field, splitting bugs, frantic shooting.">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=Inter:wght@400;600;800&display=swap" rel="stylesheet">
@@ -31,12 +31,12 @@
 
     <div class="game-shell">
         <header class="game-header">
-            <h1 class="title">SLI<span class="title-accent">THER</span></h1>
-            <div class="subtitle">A modern remake of the classic Snake (Atari 1976 · Nokia 1998)</div>
+            <h1 class="title">BUG <span class="title-accent">CRAWL</span></h1>
+            <div class="subtitle">A free fan tribute inspired by Centipede (Atari 1981)</div>
         </header>
 
         <div class="game-frame">
-            <canvas id="game" width="600" height="600"></canvas>
+            <canvas id="game" width="600" height="720"></canvas>
 
             <div class="touch-controls" aria-hidden="true">
                 <div class="dpad">
@@ -46,67 +46,62 @@
                     <button class="dpad-btn dpad-down"  data-touch="down">&darr;</button>
                 </div>
                 <div class="action-buttons">
+                    <button class="act-btn" data-touch="fire">FIRE</button>
                     <button class="act-btn secondary" data-touch="pause">II</button>
                 </div>
             </div>
 
             <div class="hud" style="grid-template-columns: repeat(4, 1fr);">
                 <div class="hud-cell"><span class="hud-label">SCORE</span><span class="hud-value" id="score">0</span></div>
-                <div class="hud-cell"><span class="hud-label">LENGTH</span><span class="hud-value" id="length">3</span></div>
-                <div class="hud-cell"><span class="hud-label">SPEED</span><span class="hud-value" id="speed">1</span></div>
+                <div class="hud-cell"><span class="hud-label">LIVES</span><span class="hud-value" id="lives">3</span></div>
+                <div class="hud-cell"><span class="hud-label">WAVE</span><span class="hud-value" id="wave">1</span></div>
                 <div class="hud-cell"><span class="hud-label">BEST</span><span class="hud-value accent" id="best">0</span></div>
             </div>
 
             <div class="overlay" id="overlay-title">
                 <div class="panel">
-                    <h2>SLITHER</h2>
-                    <p class="tag">Eat the dots. Don't bite yourself. Easy, right?</p>
+                    <h2>BUG CRAWL</h2>
+                    <p class="tag">Mushroom field. Hungry centipede. You.</p>
                     <div class="how">
-                        <div class="how-row"><span class="key">WASD</span> or <span class="key">&uarr;&darr;&larr;&rarr;</span> &mdash; turn</div>
-                        <div class="how-row"><span class="key">Space</span> &mdash; boost (eats stamina)</div>
+                        <div class="how-row"><span class="key">WASD</span> or <span class="key">&uarr;&darr;&larr;&rarr;</span> &mdash; move</div>
+                        <div class="how-row"><span class="key">Space</span> &mdash; fire (rapid)</div>
                         <div class="how-row"><span class="key">P</span> pause &middot; <span class="key">R</span> restart</div>
-                        <div class="how-row" style="margin-top:8px;">
-                            <label style="display:flex;align-items:center;gap:8px;cursor:pointer;">
-                                <input type="checkbox" id="wrap-toggle" checked> <span>Wrap walls</span>
-                            </label>
-                        </div>
+                        <div class="how-row" style="margin-top:8px;color:var(--muted)">Hit a centipede segment and it splits into two — and leaves a mushroom behind. Beware spiders.</div>
                     </div>
                     <button class="btn-play" id="btn-play">PLAY</button>
                 </div>
             </div>
 
             <div class="overlay hidden" id="overlay-pause">
-                <div class="panel">
-                    <h2>PAUSED</h2>
-                    <button class="btn-play" id="btn-resume">RESUME</button>
-                </div>
+                <div class="panel"><h2>PAUSED</h2><button class="btn-play" id="btn-resume">RESUME</button></div>
             </div>
 
             <div class="overlay hidden" id="overlay-gameover">
                 <div class="panel">
                     <h2>GAME OVER</h2>
-                    <p class="tag">Final score: <span id="final-score">0</span></p>
+                    <p class="tag">Score: <span id="final-score">0</span></p>
                     <button class="btn-play" id="btn-retry">TRY AGAIN</button>
                 </div>
             </div>
         </div>
 
         <section class="legend">
-            <h3>How it works</h3>
-            <p style="margin:0;color:var(--muted);font-size:13px;line-height:1.6;">
-                Direction is <strong>set, not held</strong> &mdash; tap once to turn. The snake speeds up as you grow.
-                Hold <strong>Space</strong> to boost briefly when stamina is full.
-                Toggle <strong>Wrap walls</strong> on the title screen to bounce off edges instead of dying.
-            </p>
+            <h3>Targets</h3>
+            <ul class="hs-list">
+                <li><span class="hs-cat">CENTIPEDE BODY</span><span class="hs-val">10 pts</span></li>
+                <li><span class="hs-cat">CENTIPEDE HEAD</span><span class="hs-val">100 pts</span></li>
+                <li><span class="hs-cat">MUSHROOM (4 hits)</span><span class="hs-val">1 pt / hit</span></li>
+                <li><span class="hs-cat">SPIDER (close)</span><span class="hs-val">900 pts</span></li>
+                <li><span class="hs-cat">SPIDER (far)</span><span class="hs-val">300 pts</span></li>
+            </ul>
         </section>
 
         <section class="legend">
             <h3>High Scores</h3>
-            <ul id="hs-list" class="hs-list">
+            <ul class="hs-list">
                 <li><span class="hs-cat">BEST SCORE</span><span class="hs-val" id="hs-score">0</span></li>
-                <li><span class="hs-cat">LONGEST SNAKE</span><span class="hs-val" id="hs-length">0</span></li>
+                <li><span class="hs-cat">HIGHEST WAVE</span><span class="hs-val" id="hs-wave">0</span></li>
             </ul>
-            <p style="margin:10px 0 0;color:var(--muted);font-size:11px;">Saved on this device.</p>
         </section>
     </div>
 

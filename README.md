@@ -7,7 +7,7 @@ classics — no install, no ads, no trackers.
 
 ## What's in here
 
-| Game           | Status   | Remake of        | Path                |
+| Game           | Status   | Inspired by      | Path                |
 | -------------- | -------- | ---------------- | ------------------- |
 | Bomb Blitz     | Live     | Bomberman        | `/bomberman/`       |
 | Slither        | Live     | Snake            | `/slither/`         |
@@ -18,6 +18,11 @@ classics — no install, no ads, no trackers.
 | Volley         | Live     | Pong             | `/volley/`          |
 | Vector Storm   | Live     | Asteroids        | `/vector-storm/`    |
 | Lane Hopper    | Live     | Frogger          | `/lane-hopper/`     |
+| Sky Shield     | Live     | Missile Command  | `/sky-shield/`      |
+| Cube Hop       | Live     | Q*bert           | `/cube-hop/`        |
+| Bug Crawl      | Live     | Centipede        | `/bug-crawl/`       |
+| Wing Squad     | Live     | Galaga           | `/wing-squad/`      |
+| Barrel Up      | Live     | Donkey Kong      | `/barrel-up/`       |
 
 Each game is fully self-contained — pure HTML5 canvas and vanilla JS.
 No build step, no framework, no megabytes.

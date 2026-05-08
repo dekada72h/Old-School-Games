@@ -328,6 +328,75 @@
         }
     }
 
+    // ---------- Game search ----------
+    const search = document.getElementById('game-search');
+    const grid = document.getElementById('arcade-grid');
+    if (search && grid) {
+        // Build a tag map for each card to drive matching: include classic-name
+        // (e.g. Pac-Man, Galaga) so users can find by the game they actually
+        // remember, not just our brand name.
+        const TAGS = [
+            ['bomberman/', 'bomb blitz bomberman'],
+            ['slither/', 'slither snake'],
+            ['block-drop/', 'block drop tetris'],
+            ['pellet-chase/', 'pellet chase pac-man pacman'],
+            ['star-defender/', 'star defender space invaders'],
+            ['brick-smash/', 'brick smash breakout arkanoid'],
+            ['volley/', 'volley pong'],
+            ['vector-storm/', 'vector storm asteroids'],
+            ['lane-hopper/', 'lane hopper frogger'],
+            ['sky-shield/', 'sky shield missile command'],
+            ['cube-hop/', 'cube hop qbert q*bert'],
+            ['bug-crawl/', 'bug crawl centipede'],
+            ['wing-squad/', 'wing squad galaga'],
+            ['barrel-up/', 'barrel up donkey kong']
+        ];
+        const tagMap = new Map(TAGS);
+
+        const cards = grid.querySelectorAll('.game-card--live, .game-card--soon');
+        const ghost = grid.querySelector('.game-card--ghost');
+
+        let empty = grid.querySelector('.arcade-empty');
+        if (!empty) {
+            empty = document.createElement('div');
+            empty.className = 'arcade-empty hidden';
+            empty.innerHTML = '<div class="pixel">// NO MATCH //</div><div>No cabinet matches that. Try a different keyword — or <a href="https://github.com/dekada72h/Old-School-Games/issues/new" class="text-neon-cyan underline">request it</a>.</div>';
+            grid.appendChild(empty);
+        }
+
+        const filter = () => {
+            const q = search.value.trim().toLowerCase();
+            search.parentElement.classList.toggle('is-active', q.length > 0);
+            let shown = 0;
+            for (const c of cards) {
+                const href = (c.getAttribute('href') || '').toLowerCase();
+                const tags = tagMap.get(href) || '';
+                const txt = (c.textContent || '').toLowerCase() + ' ' + tags;
+                const ok = !q || txt.includes(q);
+                c.style.display = ok ? '' : 'none';
+                if (ok) shown++;
+            }
+            // Hide ghost/suggestion card when filtering
+            if (ghost) ghost.style.display = q ? 'none' : '';
+            empty.classList.toggle('hidden', shown > 0 || !q);
+        };
+        search.addEventListener('input', filter);
+
+        // "/" focus shortcut (when not already typing in a field)
+        document.addEventListener('keydown', (e) => {
+            if (e.key === '/' && document.activeElement?.tagName !== 'INPUT' && document.activeElement?.tagName !== 'TEXTAREA') {
+                e.preventDefault();
+                search.focus();
+                search.select();
+            }
+            if (e.key === 'Escape' && document.activeElement === search) {
+                search.value = '';
+                filter();
+                search.blur();
+            }
+        });
+    }
+
     // ---------- Smooth-scroll for # links (with offset for sticky nav) ----------
     document.querySelectorAll('a[href^="#"]').forEach(a => {
         a.addEventListener('click', (e) => {

@@ -12,11 +12,25 @@
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
+    <nav class="game-nav">
+        <a href="../" class="game-nav-back">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5m7-7l-7 7 7 7"/></svg>
+            BACK&nbsp;TO&nbsp;ARCADE
+        </a>
+        <button class="game-nav-fullscreen" data-fullscreen-toggle aria-label="Toggle fullscreen">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9V3h6M21 9V3h-6M3 15v6h6M21 15v6h-6"/></svg>
+            <span class="label">FULLSCREEN</span>
+        </button>
+        <a href="../" class="game-nav-brand">
+            <span class="game-nav-brand-mark"></span>
+            <span class="game-nav-brand-text">OLD<span style="color:#ff2e63">.</span>SCHOOL</span>
+        </a>
+    </nav>
+
     <div class="scanlines" aria-hidden="true"></div>
 
     <div class="game-shell">
         <header class="game-header">
-            <a href="../" class="back-link">&larr; ARCADE</a>
             <h1 class="title">BLOCK <span class="title-accent">DROP</span></h1>
             <div class="subtitle">A modern remake of Tetris (Pajitnov 1984)</div>
         </header>
@@ -119,5 +133,6 @@
     </div>
 
     <script src="game.js"></script>
+    <script src="../assets/js/game-nav.js"></script>
 </body>
 </html>

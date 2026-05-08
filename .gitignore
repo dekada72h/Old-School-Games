@@ -7,6 +7,7 @@ node_modules/
 .cache/
 dist/
 
-# Claude Code local session config
-.claude/
+# Claude Code local session config (allow project settings.json, exclude rest)
+.claude/*
+!.claude/settings.json
 
