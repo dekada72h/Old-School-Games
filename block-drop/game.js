@@ -391,8 +391,10 @@
 
     // ---------- Loop ----------
     function fallSpeed() {
-        // Classic Tetris: gravity in seconds-per-row, accelerating with level
-        const lvl = state.level;
+        // Classic Tetris: gravity in seconds-per-row, accelerating with level.
+        // Cap the level used in the curve so the base never goes negative — past that
+        // point the formula was producing NaN and freezing gravity.
+        const lvl = Math.min(state.level, 20);
         const g = Math.max(0.05, Math.pow(0.8 - (lvl - 1) * 0.007, lvl - 1));
         return g;
     }
@@ -404,6 +406,8 @@
 
         if (state.running && !state.paused && !state.gameover) {
             state.animTime += dt;
+
+            if (typeof tickDAS === 'function' && !state.clearAnim) tickDAS(dt);
 
             if (state.clearAnim) {
                 state.clearAnim.t += dt;
@@ -571,14 +575,41 @@
     }
 
     // ---------- Input ----------
-    let dasL = 0, dasR = 0;
+    // DAS (delayed auto-shift) for horizontal movement.
+    // initial delay before repeat starts, then a short interval per repeat.
+    const DAS_DELAY = 0.16, DAS_RATE = 0.045;
+    state.dasL = 0; state.dasR = 0;
+    state.heldL = false; state.heldR = false;
+
+    function pressLeft() { move(-1, 0); state.heldL = true; state.dasL = 0; }
+    function pressRight() { move(1, 0); state.heldR = true; state.dasR = 0; }
+    function releaseLeft() { state.heldL = false; state.dasL = 0; }
+    function releaseRight() { state.heldR = false; state.dasR = 0; }
+
+    function tickDAS(dt) {
+        if (state.heldL) {
+            state.dasL += dt;
+            while (state.dasL >= DAS_DELAY + DAS_RATE) {
+                state.dasL -= DAS_RATE;
+                move(-1, 0);
+            }
+        }
+        if (state.heldR) {
+            state.dasR += dt;
+            while (state.dasR >= DAS_DELAY + DAS_RATE) {
+                state.dasR -= DAS_RATE;
+                move(1, 0);
+            }
+        }
+    }
+
     document.addEventListener('keydown', (e) => {
         if (['ArrowUp','ArrowDown','ArrowLeft','ArrowRight',' '].includes(e.key)) e.preventDefault();
         const k = e.key;
-        if (e.repeat && k !== 'ArrowDown' && k !== 's' && k !== 'S') return;
+        if (e.repeat) return; // DAS handles repeat in the game loop
 
-        if (k === 'ArrowLeft' || k === 'a' || k === 'A') move(-1, 0);
-        else if (k === 'ArrowRight' || k === 'd' || k === 'D') move(1, 0);
+        if (k === 'ArrowLeft' || k === 'a' || k === 'A') pressLeft();
+        else if (k === 'ArrowRight' || k === 'd' || k === 'D') pressRight();
         else if (k === 'ArrowDown' || k === 's' || k === 'S') state.softDrop = true;
         else if (k === 'ArrowUp' || k === 'w' || k === 'W' || k === 'x' || k === 'X') rotate(1);
         else if (k === 'z' || k === 'Z') rotate(-1);
@@ -588,31 +619,41 @@
         else if (k === 'r' || k === 'R') restart();
     });
     document.addEventListener('keyup', (e) => {
-        if (e.key === 'ArrowDown' || e.key === 's' || e.key === 'S') state.softDrop = false;
+        const k = e.key;
+        if (k === 'ArrowDown' || k === 's' || k === 'S') state.softDrop = false;
+        else if (k === 'ArrowLeft' || k === 'a' || k === 'A') releaseLeft();
+        else if (k === 'ArrowRight' || k === 'd' || k === 'D') releaseRight();
     });
 
     document.querySelectorAll('[data-touch]').forEach(b => {
         const a = b.dataset.touch;
-        b.addEventListener('touchstart', (e) => {
-            e.preventDefault();
-            if (a === 'left') move(-1, 0);
-            else if (a === 'right') move(1, 0);
+        let touchActive = false;
+        const press = (e) => {
+            if (e && e.preventDefault) e.preventDefault();
+            if (e && e.type === 'touchstart') touchActive = true;
+            if (e && e.type === 'mousedown' && touchActive) return;
+            if (a === 'left') pressLeft();
+            else if (a === 'right') pressRight();
             else if (a === 'down') state.softDrop = true;
             else if (a === 'rotate') rotate(1);
             else if (a === 'drop') hardDrop();
             else if (a === 'hold') holdPiece();
             else if (a === 'pause') togglePause();
-        }, { passive: false });
-        b.addEventListener('touchend', () => { if (a === 'down') state.softDrop = false; });
-        b.addEventListener('mousedown', () => {
-            if (a === 'left') move(-1, 0);
-            else if (a === 'right') move(1, 0);
-            else if (a === 'down') softDrop();
-            else if (a === 'rotate') rotate(1);
-            else if (a === 'drop') hardDrop();
-            else if (a === 'hold') holdPiece();
-            else if (a === 'pause') togglePause();
-        });
+        };
+        const release = (e) => {
+            if (e && e.type === 'touchend') {
+                setTimeout(() => { touchActive = false; }, 400);
+            }
+            if (a === 'left') releaseLeft();
+            else if (a === 'right') releaseRight();
+            else if (a === 'down') state.softDrop = false;
+        };
+        b.addEventListener('touchstart', press, { passive: false });
+        b.addEventListener('touchend', release);
+        b.addEventListener('touchcancel', release);
+        b.addEventListener('mousedown', press);
+        b.addEventListener('mouseup', release);
+        b.addEventListener('mouseleave', release);
     });
 
     function togglePause() {

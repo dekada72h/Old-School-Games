@@ -1038,10 +1038,11 @@
     }
 
     // Chaser / smart / boss aim at the player
-    if (!preferred && (en.type === 'chaser' || en.type === 'smart' || en.type === 'boss')) {
+    const isBoss = typeof en.type === 'string' && en.type.startsWith('boss');
+    if (!preferred && (en.type === 'chaser' || en.type === 'smart' || isBoss)) {
       const px = Math.floor(game.player.x / TILE);
       const py = Math.floor(game.player.y / TILE);
-      const useBfs = (en.type === 'smart' || en.type === 'boss');
+      const useBfs = (en.type === 'smart' || isBoss);
       const d = useBfs ? bfsNextStep(cx, cy, px, py, en.canPhase) : null;
       if (d) preferred = d;
       else {
@@ -1153,7 +1154,11 @@
         color: '#ffd06b', size: rand(2, 4.5),
       });
     }
-    setTimeout(() => {
+    if (game._respawnTimer) clearTimeout(game._respawnTimer);
+    game._respawnTimer = setTimeout(() => {
+      game._respawnTimer = null;
+      // Bail if a new game has replaced the player in the meantime.
+      if (game.player !== p) return;
       if (p.lives <= 0) endGame(false);
       else respawnPlayer();
     }, 1200);
@@ -1187,10 +1192,13 @@
     // Time
     game.timeLeft -= dt;
     if (game.timeLeft <= 0) {
-      // out of time = death
       game.timeLeft = 0;
-      damagePlayer();
-      game.timeLeft = 60; // give a small grace window to clear
+      if (game.stageKind === 'bonus') {
+        // Bonus stage just ends when the clock runs out — handled below.
+      } else {
+        damagePlayer();
+        game.timeLeft = 60; // grace window to keep playing after a timeout death
+      }
     }
     ui.time.textContent = formatTime(game.timeLeft);
 
@@ -1269,16 +1277,13 @@
       b.fuse -= dt;
       // Handle kicked motion (slide one tile at a time until hitting something)
       if (b.kicked) {
-        const cx = b.x, cy = b.y;
-        const nx = cx + b.kicked.dx, ny = cy + b.kicked.dy;
-        const blocked = tileAt(nx, ny) !== TILE_EMPTY || bombAt(nx, ny);
-        if (blocked) b.kicked = null;
-        else {
-          // animate by moving the bomb a tile (visuals snap, sufficient for arcade feel)
-          b.x = nx; b.y = ny;
-          // continue sliding; small per-step delay handled by slowing the kick check
-          b._kickCool = (b._kickCool || 0) + dt;
-          if (b._kickCool < 0.10) b.kicked = b.kicked; else b._kickCool = 0;
+        b._kickCool = (b._kickCool || 0) + dt;
+        if (b._kickCool >= 0.08) {
+          b._kickCool = 0;
+          const nx = b.x + b.kicked.dx, ny = b.y + b.kicked.dy;
+          const blocked = tileAt(nx, ny) !== TILE_EMPTY || bombAt(nx, ny);
+          if (blocked) b.kicked = null;
+          else { b.x = nx; b.y = ny; }
         }
       }
     }
@@ -1959,6 +1964,7 @@
 
   // -------- Game flow --------
   function startNewGame() {
+    if (game._respawnTimer) { clearTimeout(game._respawnTimer); game._respawnTimer = null; }
     game.score = 0;
     game.level = 0;
     game.runKills = 0;

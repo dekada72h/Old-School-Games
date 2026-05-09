@@ -149,6 +149,8 @@
     }
 
     function newGame() {
+        if (state._respawnTimer) { clearTimeout(state._respawnTimer); state._respawnTimer = null; }
+        state.runId = (state.runId || 0) + 1;
         state.score = 0;
         state.lives = 3;
         state.wave = 1;
@@ -228,8 +230,12 @@
             b.x += b.vx * dt;
             b.y += b.vy * dt;
             b.life -= dt;
-            wrap(b);
-            if (b.life <= 0) { state.bullets.splice(i, 1); continue; }
+            // Bullets fly off the screen rather than wrapping — wrap was hitting asteroids
+            // on the far side of the playfield.
+            if (b.life <= 0 || b.x < -10 || b.x > W + 10 || b.y < -10 || b.y > H + 10) {
+                state.bullets.splice(i, 1);
+                continue;
+            }
             // Hit rocks
             let hit = false;
             for (let j = state.rocks.length - 1; j >= 0; j--) {
@@ -397,7 +403,11 @@
             ui.finalWave.textContent = state.wave;
             setTimeout(() => ui.oOver.classList.remove('hidden'), 1000);
         } else {
-            setTimeout(() => {
+            const runId = state.runId;
+            if (state._respawnTimer) clearTimeout(state._respawnTimer);
+            state._respawnTimer = setTimeout(() => {
+                state._respawnTimer = null;
+                if (state.runId !== runId) return;
                 state.ship = makeShip();
                 state.respawnSafeT = 2;
                 updateHud();
@@ -561,6 +571,8 @@
     // ---------- Input ----------
     document.addEventListener('keydown', (e) => {
         if (['ArrowUp','ArrowDown','ArrowLeft','ArrowRight',' ','Shift'].includes(e.key)) e.preventDefault();
+        // Don't let browser auto-repeat keep firing one-shot actions (hyperspace, fire).
+        if (e.repeat && (e.key === 'Shift' || e.key === ' ')) return;
         const k = e.key;
         if (k === 'ArrowLeft' || k === 'a' || k === 'A') state.keyL = true;
         else if (k === 'ArrowRight' || k === 'd' || k === 'D') state.keyR = true;
@@ -579,7 +591,10 @@
 
     document.querySelectorAll('[data-touch]').forEach(b => {
         const a = b.dataset.touch;
+        let touchActive = false;
         const press = (e) => { e.preventDefault();
+            if (e.type === 'touchstart') touchActive = true;
+            if (e.type === 'mousedown' && touchActive) return;
             if (a === 'left') state.keyL = true;
             else if (a === 'right') state.keyR = true;
             else if (a === 'thrust') state.keyT = true;
@@ -587,15 +602,21 @@
             else if (a === 'hyperspace') hyperspace();
             else if (a === 'pause') togglePause();
         };
-        const release = () => {
+        const release = (e) => {
+            if (e && e.preventDefault) e.preventDefault();
+            if (e && e.type === 'touchend') {
+                setTimeout(() => { touchActive = false; }, 400);
+            }
             if (a === 'left') state.keyL = false;
             if (a === 'right') state.keyR = false;
             if (a === 'thrust') state.keyT = false;
         };
         b.addEventListener('touchstart', press, { passive: false });
-        b.addEventListener('touchend', release);
+        b.addEventListener('touchend', release, { passive: false });
+        b.addEventListener('touchcancel', release, { passive: false });
         b.addEventListener('mousedown', press);
         b.addEventListener('mouseup', release);
+        b.addEventListener('mouseleave', release);
     });
 
     function togglePause() {

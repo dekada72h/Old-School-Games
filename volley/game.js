@@ -138,8 +138,9 @@
         if (state.cReact >= cfg.reaction) {
             state.cReact = 0;
             // Predict where ball will hit CPU side, with some inaccuracy
-            if (state.ball.vx > 0) {
-                const t = (W - PADDLE_W - 12 - state.ball.x) / Math.max(1, state.ball.vx);
+            const cpuX = W - PADDLE_W - 12;
+            if (state.ball.vx > 0 && state.ball.x < cpuX) {
+                const t = Math.max(0, (cpuX - state.ball.x) / Math.max(1, state.ball.vx));
                 let predY = state.ball.y + state.ball.vy * t;
                 // Account for one bounce
                 const bounceY = ((predY % (2 * H)) + 2 * H) % (2 * H);
@@ -154,6 +155,18 @@
         const cSp = 360;
         state.cY += Math.sign(dy) * Math.min(Math.abs(dy), cSp * dt);
         state.cY = Math.max(PADDLE_H / 2 + 6, Math.min(H - PADDLE_H / 2 - 6, state.cY));
+
+        // Visual decay (flash + sparks) keeps running even during serve countdown.
+        if (state.flash > 0) state.flash = Math.max(0, state.flash - dt * 1.5);
+        for (let i = state.sparks.length - 1; i >= 0; i--) {
+            const s = state.sparks[i];
+            s.age += dt;
+            if (s.age >= s.life) { state.sparks.splice(i, 1); continue; }
+            s.x += s.vx * dt;
+            s.y += s.vy * dt;
+            s.vx *= 0.9;
+            s.vy *= 0.9;
+        }
 
         // Ball
         if (state.serveT > 0) {
@@ -236,18 +249,7 @@
             else reset('C');
         }
 
-        // Sparks
-        for (let i = state.sparks.length - 1; i >= 0; i--) {
-            const s = state.sparks[i];
-            s.age += dt;
-            if (s.age >= s.life) { state.sparks.splice(i, 1); continue; }
-            s.x += s.vx * dt;
-            s.y += s.vy * dt;
-            s.vx *= 0.9;
-            s.vy *= 0.9;
-        }
-
-        if (state.flash > 0) state.flash = Math.max(0, state.flash - dt * 1.5);
+        // Sparks/flash decay handled at the top of step() so they keep running during serveT.
     }
 
     function spawnSparks(x, y, n = 8, color = '#fff') {
@@ -265,6 +267,8 @@
     function endMatch(won) {
         state.ended = true;
         state.running = false;
+        state.sparks = [];
+        state.flash = 0;
         if (won) state.wins++;
         saveHS();
         renderHS();

@@ -164,6 +164,11 @@
         state.lives = 3;
         state.stage = 1;
         state.gameover = false;
+        state.deathT = 0;
+        state.fireCooldown = 0;
+        state.bullets = [];
+        state.enemyBullets = [];
+        state.particles = [];
         state.player = spawnPlayer();
         spawnStars();
         startStage();
@@ -190,6 +195,13 @@
         for (const s of state.stars) {
             s.y += s.sp * dt;
             if (s.y > H) { s.y = -2; s.x = Math.random() * W; }
+        }
+
+        // Hold gameplay during the "STAGE N" overlay so enemies don't spawn/attack
+        // before the player can see them.
+        if (state.stageReadyT > 0) {
+            state.stageReadyT -= dt;
+            return;
         }
 
         // Spawn from queue
@@ -579,21 +591,30 @@
 
     document.querySelectorAll('[data-touch]').forEach(b => {
         const a = b.dataset.touch;
+        let touchActive = false;
         const press = (e) => { e.preventDefault();
+            if (e.type === 'touchstart') touchActive = true;
+            if (e.type === 'mousedown' && touchActive) return;
             if (a === 'left') state.keyL = true;
             else if (a === 'right') state.keyR = true;
             else if (a === 'fire') state.keyFire = true;
             else if (a === 'pause') togglePause();
         };
-        const release = () => {
+        const release = (e) => {
+            if (e && e.preventDefault) e.preventDefault();
+            if (e && e.type === 'touchend') {
+                setTimeout(() => { touchActive = false; }, 400);
+            }
             if (a === 'left') state.keyL = false;
             if (a === 'right') state.keyR = false;
             if (a === 'fire') state.keyFire = false;
         };
         b.addEventListener('touchstart', press, { passive: false });
-        b.addEventListener('touchend', release);
+        b.addEventListener('touchend', release, { passive: false });
+        b.addEventListener('touchcancel', release, { passive: false });
         b.addEventListener('mousedown', press);
         b.addEventListener('mouseup', release);
+        b.addEventListener('mouseleave', release);
     });
 
     function togglePause() {

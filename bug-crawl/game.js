@@ -95,10 +95,11 @@
     function spawnMushrooms() {
         state.mushrooms = {};
         const count = 35 + state.wave * 2;
+        // Valid rows: 1..PLAYER_ZONE_TOP-3 inclusive (keep gap above the player zone).
+        const rRange = PLAYER_ZONE_TOP - 3; // sample size
         for (let i = 0; i < count; i++) {
             const c = Math.floor(Math.random() * COLS);
-            const r = Math.floor(Math.random() * (ROWS - 4)) + 1; // not in player zone
-            if (r >= PLAYER_ZONE_TOP - 2) continue;
+            const r = Math.floor(Math.random() * rRange) + 1;
             state.mushrooms[`${c},${r}`] = { hp: 4 };
         }
     }
@@ -251,6 +252,7 @@
                 state.spider = null;
                 state.bullets.splice(i, 1);
                 bump();
+                updateHud();
             }
         }
 
@@ -267,18 +269,21 @@
                     }
                 } else {
                     s.x += s.dir * cSpeed * dt;
-                    s.col = Math.floor(s.x / TILE);
+                    s.x = Math.max(12, Math.min(W - 12, s.x));
+                    s.col = Math.max(0, Math.min(COLS - 1, Math.floor(s.x / TILE)));
                     // Check wall or mushroom
-                    if (s.x < 12 || s.x > W - 12 ||
+                    if (s.x <= 12 || s.x >= W - 12 ||
                         state.mushrooms[`${s.col + s.dir},${s.row}`]) {
                         s.dir = -s.dir;
                         s.goingDown = true;
                         s.y = (s.row * TILE) + 8;
                     }
                 }
-                // Reached bottom = wrap to top of player zone (and stay) — classic Centipede
+                // Reached bottom — bounce back up into the player zone and walk along the floor.
                 if (s.row >= ROWS - 1) {
-                    s.row = ROWS - 2;
+                    s.row = ROWS - 1;
+                    s.y = (ROWS - 1) * TILE + TILE / 2;
+                    s.goingDown = false;
                 }
                 // Hit player?
                 if (state.player.alive &&

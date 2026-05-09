@@ -155,7 +155,7 @@
     }
 
     function maybeSpawnGold() {
-        if (state.gold || Math.random() > 0.04) return;
+        if (state.gold) return;
         let x, y, ok;
         let tries = 0;
         do {
@@ -413,14 +413,17 @@
                 state.moveAccum -= period;
                 step();
                 if (state.gameover) break;
-                if (state.gold) {
-                    // gold despawns after a few seconds
-                    state.gold.life -= period;
-                    if (state.gold.life <= 0) state.gold = null;
-                }
+            }
+            // Gold lifetime ticks against wall-clock time, not snake-step count.
+            if (state.gold) {
+                state.gold.life -= dt;
+                if (state.gold.life <= 0) state.gold = null;
             }
             state.goldTimer += dt;
-            if (state.goldTimer > 6) { state.goldTimer = 0; maybeSpawnGold(); }
+            if (state.goldTimer > 6) {
+                state.goldTimer = 0;
+                if (!state.gold && Math.random() < 0.4) maybeSpawnGold();
+            }
         }
 
         render(dt);

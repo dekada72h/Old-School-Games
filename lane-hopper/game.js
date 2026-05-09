@@ -35,10 +35,12 @@
     // Row 8-12: road lanes
     // Row 13: start safe (grass + sidewalk)
     const ROW_GOAL = 0;
-    const ROW_RIVER_TOP = 1, ROW_RIVER_BOTTOM = 6;
+    const ROW_GOAL_BANK = 1;
+    const ROW_RIVER_TOP = 2, ROW_RIVER_BOTTOM = 6;
     const ROW_MEDIAN = 7;
     const ROW_ROAD_TOP = 8, ROW_ROAD_BOTTOM = 12;
     const ROW_START = 13;
+    const FROG_W = 24;
 
     const COLORS = {
         bg: '#050208',
@@ -158,6 +160,8 @@
         state.frog.y = state.frog.row * TILE + TILE / 2;
     }
 
+    let levelOverlayTimer = null;
+    let nextLevelTimer = null;
     function newLevel() {
         state.goals = [false, false, false, false, false];
         state.frog = { col: 7, row: ROW_START, x: 0, y: 0, jumpT: 0, fromX: 0, fromY: 0, dir: 'up' };
@@ -167,7 +171,8 @@
         ui.levelTitle.textContent = `LEVEL ${state.level}`;
         ui.levelTag.textContent = state.level === 1 ? 'Hop to it...' : 'They\'re going faster now.';
         ui.oLevel.classList.remove('hidden');
-        setTimeout(() => ui.oLevel.classList.add('hidden'), 1300);
+        if (levelOverlayTimer) clearTimeout(levelOverlayTimer);
+        levelOverlayTimer = setTimeout(() => { ui.oLevel.classList.add('hidden'); levelOverlayTimer = null; }, 1300);
         updateHud();
     }
 
@@ -250,15 +255,12 @@
             const lane = state.lanes.find(l => l.row === state.frog.row);
             if (lane) {
                 if (lane.type === 'road') {
-                    // Hit by car?
+                    // Hit by car? AABB between frog rect and item rect
                     for (const item of lane.items) {
-                        if (state.frog.x >= item.x - state.frog.w / 2 - item.w / 2 + item.w / 2 - 4 &&
-                            state.frog.x <= item.x + item.w + 4) {
-                            // Use simpler AABB — use x in [item.x, item.x + item.w]
-                            if (state.frog.x >= item.x + 4 && state.frog.x <= item.x + item.w - 4) {
-                                die('Splat');
-                                return;
-                            }
+                        if (state.frog.x + FROG_W / 2 > item.x + 2 &&
+                            state.frog.x - FROG_W / 2 < item.x + item.w - 2) {
+                            die('Splat');
+                            return;
                         }
                     }
                 } else if (lane.type === 'river') {
@@ -303,16 +305,13 @@
                     state.score += 1000;
                     state.level++;
                     bump();
-                    setTimeout(() => newLevel(), 1500);
+                    if (nextLevelTimer) clearTimeout(nextLevelTimer);
+                    nextLevelTimer = setTimeout(() => { nextLevelTimer = null; newLevel(); }, 1500);
                     state.winT = 1.5;
                 }
                 return;
-            } else if (state.frog.row === ROW_RIVER_TOP) {
-                // Top river bank (just water decor — same as river hazard if not on log)
-                // Actually treat row 1 as still a hazard? Let's treat it same as goal area edge
-                die('Drowned');
-                return;
             }
+            // Row 1 (ROW_GOAL_BANK) and row 7 (ROW_MEDIAN) are safe pass-through tiles.
         }
     }
 
@@ -392,6 +391,15 @@
                 ctx.fillStyle = COLORS.grassDark;
                 ctx.fillRect(x, y, TILE, TILE);
             }
+        }
+
+        // Goal bank (row 1) — pass-through grass between pads and river
+        ctx.fillStyle = COLORS.grass;
+        ctx.fillRect(0, ROW_GOAL_BANK * TILE, W, TILE);
+        ctx.fillStyle = COLORS.grassDark;
+        for (let c = 0; c < COLS; c++) {
+            ctx.fillRect(c * TILE + (c % 2 === 0 ? 8 : 26), ROW_GOAL_BANK * TILE + 12, 4, 4);
+            ctx.fillRect(c * TILE + (c % 2 === 0 ? 20 : 10), ROW_GOAL_BANK * TILE + 28, 3, 3);
         }
 
         // River
@@ -623,17 +631,19 @@
 
     let ts = null;
     cv.addEventListener('touchstart', (e) => {
+        e.preventDefault();
         if (e.touches.length === 1) ts = { x: e.touches[0].clientX, y: e.touches[0].clientY };
-    });
+    }, { passive: false });
     cv.addEventListener('touchend', (e) => {
+        e.preventDefault();
         if (!ts) return;
         const t = e.changedTouches[0];
         const dx = t.clientX - ts.x, dy = t.clientY - ts.y;
+        ts = null;
         if (Math.abs(dx) < 20 && Math.abs(dy) < 20) return;
         if (Math.abs(dx) > Math.abs(dy)) tryJump(dx > 0 ? 1 : -1, 0);
         else tryJump(0, dy > 0 ? 1 : -1);
-        ts = null;
-    });
+    }, { passive: false });
 
     function togglePause() {
         if (!state.running || state.gameover) return;
@@ -642,6 +652,8 @@
         if (!state.paused) last = performance.now();
     }
     function restart() {
+        if (nextLevelTimer) { clearTimeout(nextLevelTimer); nextLevelTimer = null; }
+        if (levelOverlayTimer) { clearTimeout(levelOverlayTimer); levelOverlayTimer = null; }
         ui.oOver.classList.add('hidden');
         ui.oPause.classList.add('hidden');
         ui.oLevel.classList.add('hidden');

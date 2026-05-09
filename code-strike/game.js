@@ -436,14 +436,15 @@
             p.vx = 0;
         }
 
-        // Jump (variable)
+        // Jump (variable). Only consume the buffered keyJump when we actually launch —
+        // otherwise pressing space mid-air triggers an unwanted hop the moment the player lands.
         if (state.keyJump && p.onGround && !p.prone) {
             p.vy = -440;
             p.onGround = false;
             p.jumpTimer = 0.2;
             blip(660, 0.06, 'square', 0.04);
             state.keyJump = false;
-        } else {
+        } else if (!state.jumpHeld) {
             state.keyJump = false;
         }
         if (state.jumpHeld && p.jumpTimer > 0 && p.vy < 0) {
@@ -519,8 +520,11 @@
 
             // Cull off-screen right (don't activate until player gets close)
             if (e.x > state.camX + W + 80) continue;
-            // Cull dead far behind
-            if (e.x < state.camX - 80) continue;
+            // Remove enemies far behind the camera so they don't accumulate forever.
+            if (e.x < state.camX - 80) {
+                state.enemies.splice(i, 1);
+                continue;
+            }
 
             if (e.kind === 'soldier' || e.kind === 'runner') {
                 e.vy += 1300 * dt;
@@ -698,9 +702,12 @@
         ui.boss.textContent = 'DOWN';
         state.score += 5000;
         updateHud();
-        // Big explosion
+        const runId = state.runId;
+        // Big explosion — bail if the user restarts mid-explosion so we don't
+        // mutate a fresh boss/state.
         for (let i = 0; i < 12; i++) {
             setTimeout(() => {
+                if (state.runId !== runId || !state.boss) return;
                 spawnExplosion(state.boss.x + (Math.random() - 0.5) * 60, state.boss.y + (Math.random() - 0.5) * 70);
                 blip(110 + Math.random() * 200, 0.18, 'sawtooth', 0.06);
             }, i * 80);
@@ -769,9 +776,9 @@
     function updateCamera() {
         const target = state.player.x - W * 0.4;
         let max = LEVEL_W - W;
-        // Lock camera at boss when activated
+        // Lock camera at boss when activated — keep boss roughly on the right side of the screen.
         if (state.boss && state.boss.active) {
-            max = Math.min(max, state.boss.x - W * 0.55 + W);
+            max = Math.min(max, state.boss.x - W * 0.55);
         }
         state.camX = Math.max(0, Math.min(max, target));
     }
@@ -1303,6 +1310,7 @@
 
     // ---------- Game flow ----------
     function newGame() {
+        state.runId = (state.runId || 0) + 1;
         state.score = 0;
         state.lives = state.konamiActivated ? 30 : 3;
         state.weapon = 'M';

@@ -375,18 +375,23 @@
                     b.vy = 0;
                     b.platformIdx = next.idx;
                     b.falling = false;
-                    // Reverse direction based on new platform slope
+                    // Direction follows the slope's downhill side; on flat platforms keep heading
+                    // away from the wall the barrel just bounced off (or rightward by default).
                     const slope = PLATFORMS[next.idx].slope;
-                    b.vx = (slope > 0 ? -1 : 1) * Math.abs(b.vx) || (b.x < W / 2 ? Math.abs(b.vx) : -Math.abs(b.vx));
+                    const speed = Math.abs(b.vx) || (100 + state.level * 8);
+                    if (slope > 0) b.vx = -speed;
+                    else if (slope < 0) b.vx = speed;
+                    else b.vx = b.x < W / 2 ? speed : -speed;
                 }
                 if (b.y > H + 30) state.barrels.splice(i, 1);
             }
             // Collision with player
             if (state.deathT === 0 && state.winT === 0) {
                 if (Math.hypot(b.x - p.x, b.y - p.y + 8) < 16) {
-                    if (p.jumping && p.vy > 0 && b.y > p.y) {
-                        // Jumped over (sort of — actually means landing on top — but lenient)
-                    } else {
+                    // Mid-air pass-over: barrel below player AND player's feet are above barrel
+                    // top by a margin. Works for both ascending and descending arcs.
+                    const passingOver = p.jumping && (b.y - p.y) >= 6;
+                    if (!passingOver) {
                         playerDie();
                         return;
                     }
@@ -590,11 +595,16 @@
         if (k === 'ArrowRight' || k === 'd' || k === 'D') state.keyR = false;
         if (k === 'ArrowUp' || k === 'w' || k === 'W') state.keyU = false;
         if (k === 'ArrowDown' || k === 's' || k === 'S') state.keyD = false;
+        if (k === ' ') state.keyJump = false;
     });
 
     document.querySelectorAll('[data-touch]').forEach(b => {
         const a = b.dataset.touch;
+        let touchActive = false;
         const press = (e) => { e.preventDefault();
+            if (e.type === 'touchstart') touchActive = true;
+            // Suppress mousedown that follows a touch (ghost click on mobile).
+            if (e.type === 'mousedown' && touchActive) return;
             if (a === 'left') state.keyL = true;
             else if (a === 'right') state.keyR = true;
             else if (a === 'up') state.keyU = true;
@@ -602,16 +612,23 @@
             else if (a === 'jump') state.keyJump = true;
             else if (a === 'pause') togglePause();
         };
-        const release = () => {
+        const release = (e) => {
+            if (e && e.type === 'touchend') {
+                // Re-arm mouse fallback after a short delay so a real mouse click still works.
+                setTimeout(() => { touchActive = false; }, 400);
+            }
             if (a === 'left') state.keyL = false;
             if (a === 'right') state.keyR = false;
             if (a === 'up') state.keyU = false;
             if (a === 'down') state.keyD = false;
+            if (a === 'jump') state.keyJump = false;
         };
         b.addEventListener('touchstart', press, { passive: false });
         b.addEventListener('touchend', release);
+        b.addEventListener('touchcancel', release);
         b.addEventListener('mousedown', press);
         b.addEventListener('mouseup', release);
+        b.addEventListener('mouseleave', release);
     });
 
     function togglePause() {

@@ -646,21 +646,30 @@
 
     document.querySelectorAll('[data-touch]').forEach(b => {
         const a = b.dataset.touch;
+        let touchActive = false;
         const press = (e) => { e.preventDefault();
+            if (e.type === 'touchstart') touchActive = true;
+            // Suppress the synthetic mousedown that follows a real touchstart on mobile.
+            if (e.type === 'mousedown' && touchActive) return;
             if (a === 'left') state.keyL = true;
             else if (a === 'right') state.keyR = true;
             else if (a === 'fire') state.keyFire = true;
             else if (a === 'pause') togglePause();
         };
-        const release = (e) => { e.preventDefault();
+        const release = (e) => { if (e && e.preventDefault) e.preventDefault();
+            if (e && e.type === 'touchend') {
+                setTimeout(() => { touchActive = false; }, 400);
+            }
             if (a === 'left') state.keyL = false;
             if (a === 'right') state.keyR = false;
             if (a === 'fire') state.keyFire = false;
         };
         b.addEventListener('touchstart', press, { passive: false });
         b.addEventListener('touchend', release, { passive: false });
+        b.addEventListener('touchcancel', release, { passive: false });
         b.addEventListener('mousedown', press);
         b.addEventListener('mouseup', release);
+        b.addEventListener('mouseleave', release);
     });
 
     function togglePause() {

@@ -140,6 +140,7 @@
     }
 
     function newGame() {
+        state.runId = (state.runId || 0) + 1;
         state.score = 0;
         state.lives = 3;
         state.level = 1;
@@ -194,7 +195,11 @@
                 state.score += 1000 + state.lives * 100;
                 state.winT = 1.5;
                 bump();
-                for (let i = 0; i < 8; i++) setTimeout(() => blip(440 + i * 80, 0.1, 'square'), i * 60);
+                const runId = state.runId;
+                for (let i = 0; i < 8; i++) setTimeout(() => {
+                    if (state.runId !== runId) return;
+                    blip(440 + i * 80, 0.1, 'square');
+                }, i * 60);
             }
         }
     }
@@ -329,7 +334,11 @@
         if (state.deathT > 0) return;
         state.deathT = 1.0;
         state.deathReason = reason;
-        for (let i = 0; i < 4; i++) setTimeout(() => blip(220 - i * 30, 0.15, 'sawtooth'), i * 80);
+        const runId = state.runId;
+        for (let i = 0; i < 4; i++) setTimeout(() => {
+            if (state.runId !== runId) return;
+            blip(220 - i * 30, 0.15, 'sawtooth');
+        }, i * 80);
     }
 
     function onDeathDone() {

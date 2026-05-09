@@ -379,6 +379,11 @@
                     state.mode = MODE_PHASES[state.modeIndex].mode;
                     state.modeTimer = MODE_PHASES[state.modeIndex].dur;
                     state.chaseChain = 0;
+                    // Restore ghosts: only those still flipped to 'frightened' return to 'roam'.
+                    // Eaten/pen/leaving ghosts keep their state until they reset themselves.
+                    for (const g of state.ghosts) {
+                        if (g.state === 'frightened') g.state = 'roam';
+                    }
                 }
             }
         }
@@ -793,17 +798,19 @@
     // Swipe
     let ts = null;
     cv.addEventListener('touchstart', (e) => {
+        e.preventDefault();
         if (e.touches.length === 1) ts = { x: e.touches[0].clientX, y: e.touches[0].clientY };
-    }, { passive: true });
+    }, { passive: false });
     cv.addEventListener('touchend', (e) => {
+        e.preventDefault();
         if (!ts) return;
         const t = e.changedTouches[0];
         const dx = t.clientX - ts.x, dy = t.clientY - ts.y;
+        ts = null;
         if (Math.abs(dx) < 20 && Math.abs(dy) < 20) return;
         if (Math.abs(dx) > Math.abs(dy)) setDir(dx > 0 ? 1 : -1, 0);
         else setDir(0, dy > 0 ? 1 : -1);
-        ts = null;
-    });
+    }, { passive: false });
 
     function togglePause() {
         if (!state.running || state.gameover) return;

@@ -268,6 +268,9 @@
         state.level = 1;
         state.gameover = false;
         state.won = false;
+        state.particles = [];
+        state.powerups = [];
+        state.lasers = [];
         buildLevel(state.level);
         resetBallsAndPaddle(true);
         updateHud();
@@ -331,7 +334,9 @@
                 b.y - b.r <= PADDLE_Y + PADDLE_H / 2 &&
                 b.x >= state.paddle.x - state.paddle.w / 2 - b.r &&
                 b.x <= state.paddle.x + state.paddle.w / 2 + b.r) {
-                const rel = (b.x - state.paddle.x) / (state.paddle.w / 2); // -1..1
+                let rel = (b.x - state.paddle.x) / (state.paddle.w / 2); // -1..1
+                // Avoid the dead-center vertical-lock loop: nudge angle off zero.
+                if (Math.abs(rel) < 0.08) rel = (rel < 0 ? -1 : 1) * 0.08;
                 const angle = rel * (Math.PI / 3); // up to 60°
                 const spd = Math.hypot(b.vx, b.vy);
                 b.vx = spd * Math.sin(angle);
@@ -683,8 +688,8 @@
     // ---------- Input ----------
     document.addEventListener('keydown', (e) => {
         if (['ArrowLeft','ArrowRight',' '].includes(e.key)) e.preventDefault();
-        if (e.key === 'ArrowLeft' || e.key === 'a' || e.key === 'A') state.keyL = true;
-        else if (e.key === 'ArrowRight' || e.key === 'd' || e.key === 'D') state.keyR = true;
+        if (e.key === 'ArrowLeft' || e.key === 'a' || e.key === 'A') { state.keyL = true; state.mouseX = null; }
+        else if (e.key === 'ArrowRight' || e.key === 'd' || e.key === 'D') { state.keyR = true; state.mouseX = null; }
         else if (e.key === ' ') launchOrFire();
         else if (e.key === 'p' || e.key === 'P' || e.key === 'Escape') togglePause();
         else if (e.key === 'r' || e.key === 'R') restart();
@@ -713,6 +718,8 @@
             state.mouseX = (e.touches[0].clientX - r.left) * (W / r.width);
         }
     });
+    cv.addEventListener('touchend', () => { state.mouseX = null; });
+    cv.addEventListener('touchcancel', () => { state.mouseX = null; });
 
     document.querySelectorAll('[data-touch]').forEach(b => {
         const a = b.dataset.touch;

@@ -231,6 +231,21 @@
                 }
             }
 
+            // Direct hit on a battery mid-flight (before reaching ground line).
+            let hitBatt = null;
+            for (const bt of state.batteries) {
+                if (bt.alive && Math.abs(m.x - bt.x) < 16 && Math.abs(m.y - (GROUND_Y - 18)) < 14) {
+                    hitBatt = bt; break;
+                }
+            }
+            if (hitBatt) {
+                hitBatt.alive = false;
+                state.explosions.push({ x: m.x, y: m.y, r: 0, maxR: 60, age: 0, life: 1.0 });
+                for (let k = 0; k < 4; k++) setTimeout(() => blip(180 - k * 30, 0.15, 'sawtooth'), k * 60);
+                state.enemyMissiles.splice(i, 1);
+                continue;
+            }
+
             // Reached ground or off-screen
             if (m.y >= GROUND_Y) {
                 // Damage closest target
@@ -336,6 +351,8 @@
     }
 
     function fireMissile(targetX, targetY, batteryIdx = null) {
+        // Don't fire on title / pause / game-over screens.
+        if (!state.running || state.paused || state.gameover) return;
         // Pick battery
         let batt;
         if (batteryIdx !== null) {
@@ -352,9 +369,11 @@
             if (!best) return;
             batt = best;
         }
-        batt.ammo--;
         const dx = targetX - batt.x, dy = targetY - batt.y;
         const len = Math.hypot(dx, dy);
+        // Reject degenerate / clicked-on-self shots so we don't spawn NaN-velocity missiles.
+        if (len < 1) return;
+        batt.ammo--;
         const sp = 600;
         state.playerMissiles.push({
             x: batt.x, y: batt.y,

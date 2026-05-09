@@ -199,6 +199,7 @@
             facing: 1,
             onGround: false,
             jumpTimer: 0,
+            jumpBuffer: 0,
             invuln: 0,
             walkAnim: 0,
             shrinkAnim: 0,
@@ -433,16 +434,18 @@
             else if (p.vx < 0) p.vx = Math.min(0, p.vx + decel * dt);
         }
 
-        // Variable jump
-        if (state.keyJump && p.onGround) {
+        // Variable jump with input buffer — pressing slightly before landing still triggers a hop.
+        if (state.keyJump) p.jumpBuffer = 0.12;
+        else if (p.jumpBuffer > 0) p.jumpBuffer = Math.max(0, p.jumpBuffer - dt);
+
+        if (p.jumpBuffer > 0 && p.onGround) {
             p.vy = -460;
             p.onGround = false;
             p.jumpTimer = 0.22;
+            p.jumpBuffer = 0;
             blip(880, 0.08, 'square', 0.05);
-            state.keyJump = false;
-        } else {
-            state.keyJump = false;
         }
+        state.keyJump = false;
         if (state.jumpHeld && p.jumpTimer > 0 && p.vy < 0) {
             // Hold = sustain. Already initialized; just keep gravity reduced.
             p.jumpTimer -= dt;
@@ -624,6 +627,8 @@
             }
             // Skip update if far off screen (right side culling for unspawned enemies)
             if (e.x > state.camX + W + 60) continue;
+            // Cull enemies that fell into a pit but haven't been spliced yet.
+            if (e.y > LEVEL_H + 40) { state.enemies.splice(i, 1); continue; }
 
             e.vy += 1300 * dt;
             if (e.vy > 700) e.vy = 700;
