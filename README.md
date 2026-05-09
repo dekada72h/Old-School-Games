@@ -23,6 +23,8 @@ classics — no install, no ads, no trackers.
 | Bug Crawl      | Live     | Centipede        | `/bug-crawl/`       |
 | Wing Squad     | Live     | Galaga           | `/wing-squad/`      |
 | Barrel Up      | Live     | Donkey Kong      | `/barrel-up/`       |
+| Pipe Jumper    | Live     | Super Mario Bros.| `/pipe-jumper/`     |
+| Code Strike    | Live     | Contra           | `/code-strike/`     |
 
 Each game is fully self-contained — pure HTML5 canvas and vanilla JS.
 No build step, no framework, no megabytes.

@@ -349,7 +349,9 @@
             ['cube-hop/', 'cube hop qbert q*bert'],
             ['bug-crawl/', 'bug crawl centipede'],
             ['wing-squad/', 'wing squad galaga'],
-            ['barrel-up/', 'barrel up donkey kong']
+            ['barrel-up/', 'barrel up donkey kong'],
+            ['pipe-jumper/', 'pipe jumper mario super mario bros platformer'],
+            ['code-strike/', 'code strike contra konami run gun']
         ];
         const tagMap = new Map(TAGS);
 
