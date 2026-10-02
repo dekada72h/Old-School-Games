@@ -52,7 +52,10 @@
         animTime: 0,
         keyL: false, keyR: false, keyU: false, keyD: false, keyFire: false,
         fireCooldown: 0,
-        deathT: 0
+        deathT: 0,
+        invuln: 0,
+        flash: 0,
+        particles: []
     };
 
     const KEY = 'osg.bug-crawl.hs';
@@ -104,22 +107,144 @@
         }
     }
 
+    const SP = 26;   // distance between centipede segments along the path
+
+    function makeCentipede(n, x, y, dir, speed, entering) {
+        const trail = [];
+        // straight tail trailing behind the head (off-screen when entering)
+        const tailLen = n * SP + 40;
+        for (let d = 0; d <= tailLen; d += 3) trail.push({ x: x - dir * d, y });
+        return { x, y, dir, goingDown: false, vertDir: 1, reachedBottom: false, targetY: y, n, trail, speed, hurtT: 0 };
+    }
+
     function spawnCentipede() {
         state.centipedes = [];
-        const length = 10 + state.wave;
-        const seg = [];
-        for (let i = 0; i < length; i++) {
-            seg.push({
-                col: i % COLS,
-                row: 0,
-                x: (i % COLS) * TILE + TILE / 2,
-                y: TILE / 2 - i * 6,
-                dir: 1,
-                goingDown: true,
-                isHead: i === 0
-            });
+        const length = Math.min(24, 10 + state.wave);
+        state.centipedes.push(makeCentipede(length, TILE / 2 - 8, TILE / 2, 1, 110 + state.wave * 6));
+        // from wave 2: lone fast heads wander in from the sides
+        const solos = Math.min(4, state.wave - 1);
+        for (let i = 0; i < solos; i++) {
+            const dir = i % 2 ? -1 : 1;
+            const row = 3 + i * 2;
+            state.centipedes.push(makeCentipede(1, dir > 0 ? -30 - i * 60 : W + 30 + i * 60, row * TILE + TILE / 2, dir, 150 + state.wave * 6));
         }
-        state.centipedes.push(seg);
+    }
+
+    function pathPositions(c) {
+        const out = [{ x: c.x, y: c.y }];
+        const t = c.trail;
+        let need = SP, acc = 0;
+        for (let k = 0; k < t.length - 1 && out.length < c.n; k++) {
+            const a = t[k], b = t[k + 1];
+            const len = Math.hypot(a.x - b.x, a.y - b.y);
+            while (acc + len >= need && out.length < c.n) {
+                const f = (need - acc) / (len || 1);
+                out.push({ x: a.x + (b.x - a.x) * f, y: a.y + (b.y - a.y) * f });
+                need += SP;
+            }
+            acc += len;
+        }
+        while (out.length < c.n) { const l = t[t.length - 1]; out.push({ x: l.x, y: l.y }); }
+        return out;
+    }
+
+    function mushAt(col, row) { return !!state.mushrooms[`${col},${row}`]; }
+
+    function moveHead(c, dt) {
+        let dist = c.speed * dt;
+        let guard = 0;
+        while (dist > 0.001 && guard++ < 8) {
+            if (c.goingDown) {
+                const dy = c.targetY - c.y;
+                const mv = Math.min(Math.abs(dy), dist);
+                c.y += Math.sign(dy) * mv; dist -= mv;
+                if (Math.abs(c.targetY - c.y) < 0.01) { c.y = c.targetY; c.goingDown = false; }
+                continue;
+            }
+            const entering = (c.dir > 0 && c.x < TILE / 2 - 0.01) || (c.dir < 0 && c.x > W - TILE / 2 + 0.01);
+            if (entering) {
+                const toEdge = c.dir > 0 ? (TILE / 2 - c.x) : (c.x - (W - TILE / 2));
+                const mv = Math.min(dist, toEdge);
+                c.x += c.dir * mv; dist -= mv;
+                continue;
+            }
+            const col = Math.round((c.x - TILE / 2) / TILE);
+            const cx = col * TILE + TILE / 2;
+            const row = Math.round((c.y - TILE / 2) / TILE);
+            let toNext;
+            if (Math.abs(c.x - cx) < 0.01) {
+                c.x = cx;
+                const nc = col + c.dir;
+                if (nc < 0 || nc >= COLS || mushAt(nc, row)) {
+                    // drop one row and turn around
+                    if (!c.reachedBottom && row >= ROWS - 1) { c.reachedBottom = true; c.vertDir = -1; }
+                    else if (c.reachedBottom && row <= PLAYER_ZONE_TOP) c.vertDir = 1;
+                    if (c.vertDir > 0 && row >= ROWS - 1) { c.vertDir = -1; c.reachedBottom = true; }
+                    c.targetY = (row + c.vertDir) * TILE + TILE / 2;
+                    c.goingDown = true;
+                    c.dir = -c.dir;
+                    continue;
+                }
+                toNext = TILE;
+            } else {
+                toNext = c.dir > 0 ? (cx > c.x ? cx - c.x : cx + TILE - c.x) : (cx < c.x ? c.x - cx : c.x - (cx - TILE));
+            }
+            const mv = Math.min(dist, toNext);
+            c.x += c.dir * mv; dist -= mv;
+        }
+        // record trail
+        const t0 = c.trail[0];
+        t0.x = c.x; t0.y = c.y;
+        const t1 = c.trail[1];
+        if (!t1 || Math.hypot(t0.x - t1.x, t0.y - t1.y) >= 3) c.trail.unshift({ x: c.x, y: c.y });
+        const cap = Math.ceil(c.n * SP / 3) + 14;
+        if (c.trail.length > cap) c.trail.length = cap;
+    }
+
+    // Split centipede `c` at segment index `si` (that segment is destroyed)
+    function splitCentipede(ci, si) {
+        const c = state.centipedes[ci];
+        const pos = pathPositions(c);
+        const hitPos = pos[si];
+        const out = [];
+        if (si > 0) {
+            const front = Object.assign({}, c, { n: si, trail: c.trail });
+            out.push(front);
+        }
+        if (si < c.n - 1) {
+            const p0 = pos[si + 1];
+            // trail from p0 onwards (older points)
+            const dist0 = (si + 1) * SP;
+            let acc = 0, startK = c.trail.length - 1;
+            for (let k = 0; k < c.trail.length - 1; k++) {
+                const len = Math.hypot(c.trail[k].x - c.trail[k + 1].x, c.trail[k].y - c.trail[k + 1].y);
+                if (acc + len >= dist0) { startK = k + 1; break; }
+                acc += len;
+            }
+            const trail = [{ x: p0.x, y: p0.y }].concat(c.trail.slice(startK).map(q => ({ x: q.x, y: q.y })));
+            // heading from older point to p0
+            let hdx = 0, hdy = 0;
+            for (let k = 1; k < trail.length; k++) {
+                hdx = trail[0].x - trail[k].x; hdy = trail[0].y - trail[k].y;
+                if (Math.hypot(hdx, hdy) > 4) break;
+            }
+            const rowC = Math.round((p0.y - TILE / 2) / TILE);
+            const nh = Object.assign({}, c, { n: c.n - si - 1, x: p0.x, y: p0.y, trail });
+            if (Math.abs(hdy) > Math.abs(hdx)) {
+                nh.goingDown = true;
+                nh.vertDir = hdy > 0 ? 1 : -1;
+                nh.targetY = (Math.round((p0.y - TILE / 2) / TILE) + (hdy > 0 ? 1 : 0)) * TILE + TILE / 2;
+                if (hdy < 0) nh.targetY = (Math.floor((p0.y - TILE / 2) / TILE)) * TILE + TILE / 2;
+                nh.dir = c.dir;
+            } else {
+                nh.goingDown = false;
+                nh.dir = hdx >= 0 ? 1 : -1;
+                nh.y = rowC * TILE + TILE / 2;
+            }
+            out.push(nh);
+        }
+        state.centipedes.splice(ci, 1, ...out);
+        return hitPos;
     }
 
     function spawnPlayer() {
@@ -145,6 +270,8 @@
         state.gameover = false;
         spawnMushrooms();
         state.player = spawnPlayer();
+        state.invuln = 1.5;
+        state.particles = [];
         newWave();
         updateHud();
     }
@@ -183,116 +310,83 @@
             }
         }
 
-        // Bullets
+        // Centipedes move first so bullets collide with current positions
+        const cpos = [];
+        for (const c of state.centipedes) { moveHead(c, dt); cpos.push(pathPositions(c)); }
+
+        // Bullets (sub-stepped)
         for (let i = state.bullets.length - 1; i >= 0; i--) {
             const b = state.bullets[i];
-            b.y += b.vy * dt;
-            if (b.y < 0) { state.bullets.splice(i, 1); continue; }
+            let consumed = false;
+            const steps = Math.max(1, Math.ceil(Math.abs(b.vy) * dt / 10));
+            for (let st = 0; st < steps && !consumed; st++) {
+                b.y += b.vy * dt / steps;
+                if (b.y < 0) { consumed = true; break; }
 
-            // Hit mushroom?
-            const c = Math.floor(b.x / TILE);
-            const r = Math.floor(b.y / TILE);
-            const k = `${c},${r}`;
-            if (state.mushrooms[k]) {
-                state.mushrooms[k].hp--;
-                if (state.mushrooms[k].hp <= 0) {
-                    delete state.mushrooms[k];
-                    state.score += 5;
-                } else {
-                    state.score += 1;
+                const c = Math.floor(b.x / TILE);
+                const r = Math.floor(b.y / TILE);
+                const k = `${c},${r}`;
+                if (state.mushrooms[k]) {
+                    state.mushrooms[k].hp--;
+                    if (state.mushrooms[k].hp <= 0) { delete state.mushrooms[k]; state.score += 5; burst(c * TILE + TILE / 2, r * TILE + TILE / 2, COLORS.mush1, 8); }
+                    else state.score += 1;
+                    blip(440, 0.04, 'square');
+                    consumed = true; break;
                 }
-                state.bullets.splice(i, 1);
-                blip(440, 0.04, 'square');
-                continue;
-            }
 
-            // Hit centipede segment?
-            let hit = false;
-            for (let ci = 0; ci < state.centipedes.length; ci++) {
-                const cent = state.centipedes[ci];
-                for (let si = 0; si < cent.length; si++) {
-                    const s = cent[si];
-                    if (Math.abs(s.x - b.x) < 14 && Math.abs(s.y - b.y) < 14) {
-                        // Add mushroom at its position
-                        state.mushrooms[`${s.col},${s.row}`] = { hp: 4 };
-                        state.score += s.isHead ? 100 : 10;
-                        // Split centipede at this point
-                        const before = cent.slice(0, si);
-                        const after = cent.slice(si + 1);
-                        if (before.length) {
-                            // Last seg of "before" becomes head
-                            before[before.length - 1].isHead = true;
+                for (let ci = 0; ci < state.centipedes.length && !consumed; ci++) {
+                    const pos = cpos[ci];
+                    for (let si = 0; si < pos.length; si++) {
+                        if (Math.abs(pos[si].x - b.x) < 14 && Math.abs(pos[si].y - b.y) < 14) {
+                            const hp = pos[si];
+                            const mc = Math.max(0, Math.min(COLS - 1, Math.floor(hp.x / TILE)));
+                            const mr = Math.max(0, Math.min(ROWS - 1, Math.floor(hp.y / TILE)));
+                            if (mr < ROWS - 1) state.mushrooms[`${mc},${mr}`] = { hp: 4 };
+                            state.score += si === 0 ? 100 : 10;
+                            burst(hp.x, hp.y, si === 0 ? COLORS.head : COLORS.body, 10);
+                            splitCentipede(ci, si);
+                            // rebuild positions cache after the split
+                            cpos.length = 0;
+                            for (const cc of state.centipedes) cpos.push(pathPositions(cc));
+                            blip(660, 0.06, 'square');
+                            consumed = true;
+                            break;
                         }
-                        if (after.length) {
-                            after[0].isHead = true;
-                            // Reverse direction so it doesn't tail through where head was
-                            for (const a of after) a.dir = -a.dir;
-                        }
-                        // Replace
-                        const newCents = [];
-                        if (before.length) newCents.push(before);
-                        if (after.length) newCents.push(after);
-                        state.centipedes.splice(ci, 1, ...newCents);
-                        state.bullets.splice(i, 1);
-                        blip(660, 0.06, 'square');
-                        hit = true;
-                        break;
                     }
                 }
-                if (hit) break;
-            }
-            if (hit) continue;
+                if (consumed) break;
 
-            // Hit spider?
-            if (state.spider && Math.abs(state.spider.x - b.x) < 18 && Math.abs(state.spider.y - b.y) < 16) {
-                const dist = Math.hypot(state.spider.x - state.player.x, state.spider.y - state.player.y);
-                state.score += dist < 80 ? 900 : 300;
-                blip(1320, 0.15, 'square');
-                blip(880, 0.1, 'triangle');
-                state.spider = null;
-                state.bullets.splice(i, 1);
-                bump();
-                updateHud();
+                if (state.spider && Math.abs(state.spider.x - b.x) < 18 && Math.abs(state.spider.y - b.y) < 16) {
+                    const dist = Math.hypot(state.spider.x - state.player.x, state.spider.y - state.player.y);
+                    state.score += dist < 80 ? 900 : 300;
+                    burst(state.spider.x, state.spider.y, COLORS.spider, 14);
+                    blip(1320, 0.15, 'square');
+                    blip(880, 0.1, 'triangle');
+                    state.spider = null;
+                    bump();
+                    updateHud();
+                    consumed = true;
+                }
             }
+            if (consumed) state.bullets.splice(i, 1);
         }
 
-        // Centipedes
-        const cSpeed = 100 + state.wave * 8;
-        for (const cent of state.centipedes) {
-            for (const s of cent) {
-                if (s.goingDown) {
-                    s.y += cSpeed * dt;
-                    const tr = Math.floor(s.y / TILE);
-                    if (tr > s.row) {
-                        s.row = tr;
-                        s.goingDown = false;
-                    }
-                } else {
-                    s.x += s.dir * cSpeed * dt;
-                    s.x = Math.max(12, Math.min(W - 12, s.x));
-                    s.col = Math.max(0, Math.min(COLS - 1, Math.floor(s.x / TILE)));
-                    // Check wall or mushroom
-                    if (s.x <= 12 || s.x >= W - 12 ||
-                        state.mushrooms[`${s.col + s.dir},${s.row}`]) {
-                        s.dir = -s.dir;
-                        s.goingDown = true;
-                        s.y = (s.row * TILE) + 8;
-                    }
-                }
-                // Reached bottom — bounce back up into the player zone and walk along the floor.
-                if (s.row >= ROWS - 1) {
-                    s.row = ROWS - 1;
-                    s.y = (ROWS - 1) * TILE + TILE / 2;
-                    s.goingDown = false;
-                }
-                // Hit player?
-                if (state.player.alive &&
-                    Math.abs(s.x - state.player.x) < 16 &&
-                    Math.abs(s.y - state.player.y) < 16) {
-                    playerDie();
-                    return;
+        // Centipede vs player
+        if (state.player.alive && state.invuln <= 0) {
+            for (let ci = 0; ci < state.centipedes.length; ci++) {
+                for (const p of cpos[ci] || []) {
+                    if (Math.abs(p.x - state.player.x) < 16 && Math.abs(p.y - state.player.y) < 16) { playerDie(); return; }
                 }
             }
+        }
+        if (state.invuln > 0) state.invuln -= dt;
+
+        // Particles
+        for (let i = state.particles.length - 1; i >= 0; i--) {
+            const p = state.particles[i];
+            p.age += dt;
+            if (p.age >= p.life) { state.particles.splice(i, 1); continue; }
+            p.x += p.vx * dt; p.y += p.vy * dt; p.vx *= 0.94; p.vy *= 0.94;
         }
 
         // Spider
@@ -325,7 +419,7 @@
                 if (state.mushrooms[k]) delete state.mushrooms[k];
             }
             // Hit player?
-            if (state.player.alive &&
+            if (state.player.alive && state.invuln <= 0 &&
                 Math.abs(sp.x - state.player.x) < 18 &&
                 Math.abs(sp.y - state.player.y) < 16) {
                 playerDie();
@@ -335,12 +429,26 @@
         }
 
         // Wave clear?
-        if (state.centipedes.every(c => c.length === 0) || state.centipedes.length === 0) {
+        if (state.centipedes.length === 0) {
             state.wave++;
+            state.score += 200;
             bump();
+            updateHud();
+            // heal damaged mushrooms for a bonus, then start the next wave
+            for (const k in state.mushrooms) {
+                if (state.mushrooms[k].hp < 4) { state.mushrooms[k].hp = 4; state.score += 5; }
+            }
             newWave();
+            chord();
         }
     }
+
+    function burst(x, y, color, n) {
+        for (let i = 0; i < n; i++) {
+            state.particles.push({ x, y, vx: (Math.random() - 0.5) * 260, vy: (Math.random() - 0.5) * 260, age: 0, life: 0.4 + Math.random() * 0.4, color, size: 2 + Math.random() * 3 });
+        }
+    }
+    function chord() { [523, 659, 784].forEach((f, i) => setTimeout(() => blip(f, 0.12, 'triangle'), i * 80)); }
 
     function playerDie() {
         if (!state.player.alive) return;
@@ -359,27 +467,43 @@
             setTimeout(() => ui.oOver.classList.remove('hidden'), 300);
         } else {
             state.player = spawnPlayer();
+            state.invuln = 2.2;
         }
         updateHud();
     }
 
     // ---------- Render ----------
-    function render() {
-        ctx.fillStyle = COLORS.bg;
-        ctx.fillRect(0, 0, W, H);
+    let bgGrad = null;
+    const stars = Array.from({ length: 60 }, () => ({ x: Math.random() * W, y: Math.random() * H, a: 0.1 + Math.random() * 0.4, s: Math.random() * 2 + 1 }));
 
-        // Faint grid in mushroom zone
+    function render() {
+        if (!bgGrad) {
+            bgGrad = ctx.createLinearGradient(0, 0, 0, H);
+            bgGrad.addColorStop(0, '#0d0820');
+            bgGrad.addColorStop(1, '#050208');
+        }
+        ctx.fillStyle = bgGrad;
+        ctx.fillRect(0, 0, W, H);
+        for (const st of stars) {
+            ctx.globalAlpha = st.a * (0.6 + 0.4 * Math.sin(state.animTime * st.s + st.x));
+            ctx.fillStyle = '#fff';
+            ctx.fillRect(st.x, st.y, 1.5, 1.5);
+        }
+        ctx.globalAlpha = 1;
+
+        // Player zone tint
+        const zg = ctx.createLinearGradient(0, PLAYER_ZONE_TOP * TILE, 0, H);
+        zg.addColorStop(0, 'rgba(95,208,255,0.0)');
+        zg.addColorStop(1, 'rgba(95,208,255,0.07)');
+        ctx.fillStyle = zg;
+        ctx.fillRect(0, PLAYER_ZONE_TOP * TILE, W, H - PLAYER_ZONE_TOP * TILE);
+
+        // Faint grid
         ctx.strokeStyle = 'rgba(155,107,255,0.04)';
         ctx.lineWidth = 1;
         ctx.beginPath();
-        for (let x = 0; x <= COLS; x++) {
-            ctx.moveTo(x * TILE + 0.5, 0);
-            ctx.lineTo(x * TILE + 0.5, H);
-        }
-        for (let y = 0; y <= ROWS; y++) {
-            ctx.moveTo(0, y * TILE + 0.5);
-            ctx.lineTo(W, y * TILE + 0.5);
-        }
+        for (let x = 0; x <= COLS; x++) { ctx.moveTo(x * TILE + 0.5, 0); ctx.lineTo(x * TILE + 0.5, H); }
+        for (let y = 0; y <= ROWS; y++) { ctx.moveTo(0, y * TILE + 0.5); ctx.lineTo(W, y * TILE + 0.5); }
         ctx.stroke();
 
         // Mushrooms
@@ -387,123 +511,168 @@
             const [c, r] = k.split(',').map(Number);
             const m = state.mushrooms[k];
             const cx = c * TILE + TILE / 2;
-            const cy = r * TILE + TILE / 2;
+            const cy = r * TILE + TILE / 2 + 2;
             const color = m.hp === 4 ? COLORS.mush1 :
                           m.hp === 3 ? COLORS.mush2 :
                           m.hp === 2 ? COLORS.mushHurt :
                           COLORS.mushPoison;
-            // Stem
-            ctx.fillStyle = '#fff';
-            ctx.fillRect(cx - 4, cy + 2, 8, 8);
-            // Cap
+            ctx.fillStyle = '#e9e4f5';
+            roundRectP(cx - 4, cy, 8, 10, 2); ctx.fill();
+            const cg = ctx.createRadialGradient(cx - 4, cy - 8, 2, cx, cy - 2, 15);
+            cg.addColorStop(0, '#ffffff66');
+            cg.addColorStop(0.3, color);
+            cg.addColorStop(1, color);
+            ctx.shadowColor = color; ctx.shadowBlur = 8;
             ctx.fillStyle = color;
             ctx.beginPath();
-            ctx.arc(cx, cy, 12, Math.PI, Math.PI * 2);
+            ctx.ellipse(cx, cy, 14, 12 * (0.45 + m.hp * 0.14), 0, Math.PI, Math.PI * 2);
+            ctx.closePath();
             ctx.fill();
-            // Spots
-            ctx.fillStyle = 'rgba(255,255,255,0.4)';
+            ctx.shadowBlur = 0;
+            ctx.fillStyle = cg;
+            ctx.fill();
+            ctx.fillStyle = 'rgba(255,255,255,0.55)';
             ctx.beginPath();
-            ctx.arc(cx - 4, cy - 4, 2, 0, Math.PI * 2);
-            ctx.arc(cx + 5, cy - 5, 1.5, 0, Math.PI * 2);
-            ctx.arc(cx + 1, cy - 8, 1.5, 0, Math.PI * 2);
+            ctx.arc(cx - 5, cy - 5, 2.2, 0, Math.PI * 2);
+            ctx.arc(cx + 5, cy - 6, 1.7, 0, Math.PI * 2);
+            ctx.arc(cx + 1, cy - 9, 1.5, 0, Math.PI * 2);
             ctx.fill();
         }
 
-        // Centipedes
-        for (const cent of state.centipedes) {
-            for (let i = cent.length - 1; i >= 0; i--) {
-                const s = cent[i];
-                ctx.fillStyle = s.isHead ? COLORS.head : COLORS.body;
+        // Centipedes (tail first so heads overlap)
+        for (const c of state.centipedes) {
+            const pos = pathPositions(c);
+            for (let i = pos.length - 1; i >= 0; i--) {
+                const p = pos[i];
+                if (p.x < -20 || p.x > W + 20) continue;
+                const head = i === 0;
+                const wob = Math.sin(state.animTime * 12 - i * 0.8);
+                // legs
+                ctx.strokeStyle = head ? '#c28a00' : '#4c33a3';
+                ctx.lineWidth = 2;
                 ctx.beginPath();
-                ctx.arc(s.x, s.y, 12, 0, Math.PI * 2);
-                ctx.fill();
-                ctx.fillStyle = s.isHead ? '#3a2700' : COLORS.bodyDark;
-                ctx.beginPath();
-                ctx.arc(s.x, s.y + 3, 12, 0, Math.PI);
-                ctx.fill();
-                if (s.isHead) {
-                    ctx.fillStyle = '#000';
-                    ctx.fillRect(s.x - 5 + s.dir * 3, s.y - 4, 2, 2);
-                    ctx.fillRect(s.x + 3 + s.dir * 3, s.y - 4, 2, 2);
-                }
-                // Legs (decorative)
-                ctx.strokeStyle = s.isHead ? '#a36b00' : COLORS.bodyDark;
-                ctx.lineWidth = 1.5;
-                const wob = Math.sin(state.animTime * 8 + i) * 2;
-                ctx.beginPath();
-                ctx.moveTo(s.x - 12, s.y); ctx.lineTo(s.x - 16, s.y + 4 + wob);
-                ctx.moveTo(s.x + 12, s.y); ctx.lineTo(s.x + 16, s.y + 4 - wob);
+                ctx.moveTo(p.x - 4, p.y - 8); ctx.lineTo(p.x - 6 - wob * 2, p.y - 15);
+                ctx.moveTo(p.x + 4, p.y + 8); ctx.lineTo(p.x + 6 + wob * 2, p.y + 15);
+                ctx.moveTo(p.x - 4, p.y + 8); ctx.lineTo(p.x - 6 + wob * 2, p.y + 15);
+                ctx.moveTo(p.x + 4, p.y - 8); ctx.lineTo(p.x + 6 + wob * 2, p.y - 15);
                 ctx.stroke();
+                const col = head ? COLORS.head : COLORS.body;
+                const g = ctx.createRadialGradient(p.x - 3, p.y - 4, 1, p.x, p.y, 13);
+                g.addColorStop(0, head ? '#fff1b8' : '#c9b0ff');
+                g.addColorStop(1, head ? '#d49a1f' : '#5a3bc4');
+                ctx.shadowColor = col; ctx.shadowBlur = 8;
+                ctx.fillStyle = g;
+                ctx.beginPath(); ctx.arc(p.x, p.y, 12, 0, Math.PI * 2); ctx.fill();
+                ctx.shadowBlur = 0;
+                if (head) {
+                    const d = c.dir;
+                    ctx.fillStyle = '#fff';
+                    ctx.beginPath(); ctx.arc(p.x - 4 + d * 2, p.y - 3, 3.2, 0, 7); ctx.arc(p.x + 4 + d * 2, p.y - 3, 3.2, 0, 7); ctx.fill();
+                    ctx.fillStyle = '#220';
+                    ctx.beginPath(); ctx.arc(p.x - 4 + d * 3, p.y - 3, 1.5, 0, 7); ctx.arc(p.x + 4 + d * 3, p.y - 3, 1.5, 0, 7); ctx.fill();
+                    // antennae
+                    ctx.strokeStyle = '#ffd06b'; ctx.lineWidth = 1.5;
+                    ctx.beginPath();
+                    ctx.moveTo(p.x - 4, p.y - 10); ctx.lineTo(p.x - 8 + d * 2, p.y - 17);
+                    ctx.moveTo(p.x + 4, p.y - 10); ctx.lineTo(p.x + 8 + d * 2, p.y - 17);
+                    ctx.stroke();
+                }
             }
         }
 
         // Spider
         if (state.spider) {
             const sp = state.spider;
-            ctx.fillStyle = COLORS.spider;
-            ctx.beginPath();
-            ctx.arc(sp.x, sp.y, 14, 0, Math.PI * 2);
-            ctx.fill();
-            // Legs
+            ctx.shadowColor = COLORS.spider; ctx.shadowBlur = 12;
             ctx.strokeStyle = COLORS.spider;
-            ctx.lineWidth = 1.8;
+            ctx.lineWidth = 2;
             for (let i = 0; i < 4; i++) {
-                const wob = Math.sin(state.animTime * 12 + i) * 4;
+                const wob = Math.sin(state.animTime * 14 + i) * 4;
                 ctx.beginPath();
-                ctx.moveTo(sp.x - 14 + i * 2, sp.y);
-                ctx.lineTo(sp.x - 18 - i * 2, sp.y + 8 + wob);
-                ctx.stroke();
-                ctx.beginPath();
-                ctx.moveTo(sp.x + 14 - i * 2, sp.y);
-                ctx.lineTo(sp.x + 18 + i * 2, sp.y + 8 - wob);
+                ctx.moveTo(sp.x - 8, sp.y); ctx.lineTo(sp.x - 18 - i * 2, sp.y - 8 + i * 6 + wob);
+                ctx.moveTo(sp.x + 8, sp.y); ctx.lineTo(sp.x + 18 + i * 2, sp.y - 8 + i * 6 - wob);
                 ctx.stroke();
             }
-            // Eyes
+            const g = ctx.createRadialGradient(sp.x - 4, sp.y - 4, 1, sp.x, sp.y, 14);
+            g.addColorStop(0, '#ff9ab0'); g.addColorStop(1, COLORS.spider);
+            ctx.fillStyle = g;
+            ctx.beginPath(); ctx.ellipse(sp.x, sp.y, 15, 11, 0, 0, Math.PI * 2); ctx.fill();
+            ctx.shadowBlur = 0;
             ctx.fillStyle = '#fff';
-            ctx.fillRect(sp.x - 5, sp.y - 4, 3, 3);
-            ctx.fillRect(sp.x + 2, sp.y - 4, 3, 3);
+            ctx.fillRect(sp.x - 6, sp.y - 4, 4, 4);
+            ctx.fillRect(sp.x + 2, sp.y - 4, 4, 4);
         }
 
         // Bullets
+        ctx.shadowColor = '#5fd0ff'; ctx.shadowBlur = 10;
         ctx.fillStyle = COLORS.bullet;
-        for (const b of state.bullets) ctx.fillRect(b.x - 1.5, b.y - 6, 3, 12);
+        for (const b of state.bullets) ctx.fillRect(b.x - 1.5, b.y - 7, 3, 14);
+        ctx.shadowBlur = 0;
+
+        // Particles
+        for (const p of state.particles) {
+            ctx.globalAlpha = 1 - p.age / p.life;
+            ctx.fillStyle = p.color;
+            ctx.fillRect(p.x - p.size / 2, p.y - p.size / 2, p.size, p.size);
+        }
+        ctx.globalAlpha = 1;
 
         // Player zone divider
-        ctx.strokeStyle = 'rgba(95, 208, 255, 0.15)';
+        ctx.strokeStyle = 'rgba(95, 208, 255, 0.2)';
+        ctx.setLineDash([6, 6]);
         ctx.beginPath();
         ctx.moveTo(0, PLAYER_ZONE_TOP * TILE + 0.5);
         ctx.lineTo(W, PLAYER_ZONE_TOP * TILE + 0.5);
         ctx.stroke();
+        ctx.setLineDash([]);
 
         // Player
         if (state.player.alive) {
             const p = state.player;
-            ctx.fillStyle = COLORS.player;
+            if (state.invuln > 0 && Math.floor(state.animTime * 12) % 2 === 0) ctx.globalAlpha = 0.35;
+            ctx.shadowColor = COLORS.player; ctx.shadowBlur = 14;
+            const g = ctx.createLinearGradient(p.x, p.y - 14, p.x, p.y + 12);
+            g.addColorStop(0, '#bfeaff'); g.addColorStop(1, COLORS.playerDark);
+            ctx.fillStyle = g;
             ctx.beginPath();
-            ctx.moveTo(p.x, p.y - 14);
-            ctx.lineTo(p.x - 12, p.y + 10);
-            ctx.lineTo(p.x + 12, p.y + 10);
+            ctx.moveTo(p.x, p.y - 15);
+            ctx.lineTo(p.x + 13, p.y + 11);
+            ctx.lineTo(p.x + 5, p.y + 7);
+            ctx.lineTo(p.x - 5, p.y + 7);
+            ctx.lineTo(p.x - 13, p.y + 11);
             ctx.closePath();
             ctx.fill();
-            ctx.fillStyle = COLORS.playerDark;
-            ctx.fillRect(p.x - 12, p.y + 8, 24, 4);
-            // Cockpit
+            ctx.shadowBlur = 0;
             ctx.fillStyle = '#fff';
-            ctx.fillRect(p.x - 2, p.y - 6, 4, 4);
+            ctx.beginPath(); ctx.ellipse(p.x, p.y - 2, 2.5, 5, 0, 0, Math.PI * 2); ctx.fill();
+            // thruster
+            ctx.fillStyle = `rgba(255,180,60,${0.6 + Math.random() * 0.3})`;
+            ctx.beginPath(); ctx.moveTo(p.x - 4, p.y + 8); ctx.lineTo(p.x, p.y + 14 + Math.random() * 4); ctx.lineTo(p.x + 4, p.y + 8); ctx.fill();
+            ctx.globalAlpha = 1;
         } else {
-            // Death flash
-            for (let i = 0; i < 8; i++) {
+            for (let i = 0; i < 10; i++) {
                 ctx.fillStyle = i % 2 ? COLORS.player : '#ff2e63';
-                ctx.fillRect(state.player.x - 14 + Math.random() * 28, state.player.y - 14 + Math.random() * 28, 4, 4);
+                ctx.fillRect(state.player.x - 16 + Math.random() * 32, state.player.y - 16 + Math.random() * 32, 4, 4);
             }
         }
+    }
+
+    function roundRectP(x, y, w, h, r) {
+        ctx.beginPath();
+        ctx.moveTo(x + r, y);
+        ctx.arcTo(x + w, y, x + w, y + h, r);
+        ctx.arcTo(x + w, y + h, x, y + h, r);
+        ctx.arcTo(x, y + h, x, y, r);
+        ctx.arcTo(x, y, x + w, y, r);
+        ctx.closePath();
     }
 
     let last = performance.now();
     function loop(now) {
         const dt = Math.min(0.05, (now - last) / 1000);
         last = now;
-        if (state.running && !state.paused && !state.gameover) step(dt);
+        if (state.running && !state.paused && !state.gameover) { step(dt); updateHud(); }
+        else state.animTime += dt;
         render();
         requestAnimationFrame(loop);
     }

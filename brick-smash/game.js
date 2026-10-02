@@ -300,7 +300,14 @@
         if (state.slowTimer > 0) state.slowTimer -= dt;
         const ballSpd = state.ballSpeed * (state.slowTimer > 0 ? 0.55 : 1);
 
-        // Balls
+        // Balls (sub-stepped so a laggy frame can't tunnel through bricks / paddle)
+        const fastest = state.balls.reduce((m, b) => Math.max(m, Math.hypot(b.vx, b.vy)), 0);
+        const subs = Math.max(1, Math.ceil(fastest * dt / 5));
+        for (let sI = 0; sI < subs; sI++) stepBalls(dt / subs, ballSpd);
+        afterBalls(dt);
+    }
+
+    function stepBalls(dt, ballSpd) {
         for (let i = state.balls.length - 1; i >= 0; i--) {
             const b = state.balls[i];
             if (b.stuck) {
@@ -311,7 +318,7 @@
             }
             // Save trail
             b.trail.push({ x: b.x, y: b.y });
-            if (b.trail.length > 10) b.trail.shift();
+            if (b.trail.length > 14) b.trail.shift();
 
             // Move
             b.x += b.vx * dt;
@@ -373,6 +380,9 @@
             }
         }
 
+    }
+
+    function afterBalls(dt) {
         // No balls left
         if (state.balls.length === 0 && state.running && !state.gameover) {
             state.lives--;
@@ -483,7 +493,8 @@
             const seed = state.balls[0];
             if (seed) {
                 for (let i = 0; i < 2; i++) {
-                    const angle = Math.atan2(seed.vy, seed.vx) + (i ? 0.4 : -0.4);
+                    const base = (seed.vx || seed.vy) ? Math.atan2(seed.vy, seed.vx) : -Math.PI / 2;
+                    const angle = base + (i ? 0.4 : -0.4);
                     const spd = Math.hypot(seed.vx, seed.vy) || state.ballSpeed;
                     state.balls.push({
                         x: seed.x, y: seed.y,
@@ -563,15 +574,36 @@
     // ---------- Render ----------
     function render(dt) {
         state.animTime += dt;
-        ctx.fillStyle = COLORS.bg;
+        if (!bgGrad) {
+            bgGrad = ctx.createLinearGradient(0, 0, 0, H);
+            bgGrad.addColorStop(0, '#120a2e');
+            bgGrad.addColorStop(0.6, '#0a0620');
+            bgGrad.addColorStop(1, '#050208');
+        }
+        ctx.fillStyle = bgGrad;
         ctx.fillRect(0, 0, W, H);
 
-        // Subtle vertical stripes background
+        // Drifting star dots + faint grid
         ctx.save();
-        ctx.globalAlpha = 0.15;
+        ctx.globalAlpha = 0.12;
         ctx.fillStyle = COLORS.wall;
         for (let x = 0; x < W; x += 40) ctx.fillRect(x, 0, 1, H);
+        for (let y = 0; y < H; y += 40) ctx.fillRect(0, y, W, 1);
         ctx.restore();
+        ctx.fillStyle = 'rgba(255,255,255,0.5)';
+        for (const st of stars) {
+            const yy = (st.y + state.animTime * st.s) % H;
+            ctx.globalAlpha = st.a;
+            ctx.fillRect(st.x, yy, 1.5, 1.5);
+        }
+        ctx.globalAlpha = 1;
+
+        // Side rails
+        ctx.strokeStyle = 'rgba(95,208,255,0.35)';
+        ctx.lineWidth = 2;
+        ctx.shadowColor = '#5fd0ff'; ctx.shadowBlur = 10;
+        ctx.strokeRect(1, 1, W - 2, H + 20);
+        ctx.shadowBlur = 0;
 
         // Bricks
         for (const br of state.bricks) {
@@ -579,22 +611,34 @@
             const color = br.type === 9 ? COLORS.brickIndestructible :
                           br.type === 7 ? COLORS.brickReinforced :
                           COLORS.bricks[br.type - 1];
-            ctx.fillStyle = color;
-            ctx.fillRect(br.x, br.y, br.w, br.h);
-            ctx.fillStyle = 'rgba(255,255,255,0.18)';
-            ctx.fillRect(br.x, br.y, br.w, 3);
-            ctx.fillStyle = 'rgba(0,0,0,0.25)';
-            ctx.fillRect(br.x, br.y + br.h - 3, br.w, 3);
+            const g = ctx.createLinearGradient(0, br.y, 0, br.y + br.h);
+            g.addColorStop(0, lighten(color, 0.35));
+            g.addColorStop(0.5, color);
+            g.addColorStop(1, lighten(color, -0.3));
+            if (br.type !== 9) { ctx.shadowColor = color; ctx.shadowBlur = 8; }
+            ctx.fillStyle = g;
+            roundRect(br.x, br.y, br.w, br.h, 4); ctx.fill();
+            ctx.shadowBlur = 0;
+            ctx.fillStyle = 'rgba(255,255,255,0.22)';
+            ctx.fillRect(br.x + 3, br.y + 2, br.w - 6, 2);
+            if (br.type === 9) {
+                ctx.strokeStyle = 'rgba(255,255,255,0.18)'; ctx.lineWidth = 1;
+                ctx.beginPath();
+                ctx.moveTo(br.x + 4, br.y + br.h - 4); ctx.lineTo(br.x + br.w - 4, br.y + 4);
+                ctx.stroke();
+            }
             if (br.flash > 0) {
                 ctx.fillStyle = `rgba(255,255,255,${br.flash * 0.6})`;
-                ctx.fillRect(br.x, br.y, br.w, br.h);
+                roundRect(br.x, br.y, br.w, br.h, 4); ctx.fill();
             }
-            // 2-hit indicator
+            // 2-hit indicator: cracks
             if (br.type === 7 && br.hp === 1) {
-                ctx.fillStyle = 'rgba(0,0,0,0.5)';
-                for (let yy = 0; yy < br.h; yy += 4) {
-                    ctx.fillRect(br.x + (yy % 8 ? 4 : 0), br.y + yy, br.w, 1);
-                }
+                ctx.strokeStyle = 'rgba(0,0,0,0.6)'; ctx.lineWidth = 1.5;
+                ctx.beginPath();
+                ctx.moveTo(br.x + br.w * 0.3, br.y); ctx.lineTo(br.x + br.w * 0.45, br.y + br.h * 0.5);
+                ctx.lineTo(br.x + br.w * 0.35, br.y + br.h);
+                ctx.moveTo(br.x + br.w * 0.45, br.y + br.h * 0.5); ctx.lineTo(br.x + br.w * 0.7, br.y + br.h * 0.7);
+                ctx.stroke();
             }
         }
 
@@ -602,14 +646,20 @@
         const pw = state.paddle.w;
         const px = state.paddle.x - pw / 2;
         const py = PADDLE_Y - PADDLE_H / 2;
-        ctx.fillStyle = COLORS.paddle;
-        roundRect(px, py, pw, PADDLE_H, 6); ctx.fill();
+        const pg = ctx.createLinearGradient(0, py, 0, py + PADDLE_H);
+        pg.addColorStop(0, '#ffb3e6');
+        pg.addColorStop(0.5, COLORS.paddle);
+        pg.addColorStop(1, '#a03a86');
+        ctx.shadowColor = COLORS.paddle; ctx.shadowBlur = 16;
+        ctx.fillStyle = pg;
+        roundRect(px, py, pw, PADDLE_H, 7); ctx.fill();
+        ctx.shadowBlur = 0;
         ctx.fillStyle = COLORS.paddleHighlight;
-        ctx.fillRect(px + 4, py + 2, pw - 8, 3);
+        ctx.fillRect(px + 6, py + 2, pw - 12, 2);
         if (state.paddle.lasers > 0) {
             ctx.fillStyle = COLORS.bricks[1];
-            ctx.fillRect(px + 6, py - 4, 4, 4);
-            ctx.fillRect(px + pw - 10, py - 4, 4, 4);
+            ctx.fillRect(px + 6, py - 5, 4, 6);
+            ctx.fillRect(px + pw - 10, py - 5, 4, 6);
         }
 
         // Lasers
@@ -642,8 +692,10 @@
                 ctx.arc(t.x, t.y, b.r * (i / b.trail.length), 0, Math.PI * 2);
                 ctx.fill();
             }
+            ctx.shadowColor = '#ffffff'; ctx.shadowBlur = 14;
             ctx.fillStyle = COLORS.ball;
             ctx.beginPath(); ctx.arc(b.x, b.y, b.r, 0, Math.PI * 2); ctx.fill();
+            ctx.shadowBlur = 0;
             // Highlight
             ctx.fillStyle = 'rgba(255,255,255,0.5)';
             ctx.beginPath(); ctx.arc(b.x - 2, b.y - 2, 2, 0, Math.PI * 2); ctx.fill();
@@ -658,11 +710,27 @@
         }
         ctx.globalAlpha = 1;
 
+        // Launch hint
+        if (state.running && !state.paused && state.balls.some(b => b.stuck)) {
+            ctx.fillStyle = `rgba(255,255,255,${0.55 + Math.sin(state.animTime * 5) * 0.3})`;
+            ctx.font = "10px 'Press Start 2P', monospace";
+            ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+            ctx.fillText('CLICK OR SPACE TO LAUNCH', W / 2, PADDLE_Y - 60);
+        }
+
         // Slow indicator
         if (state.slowTimer > 0) {
             ctx.fillStyle = `rgba(155, 107, 255, ${0.3 + Math.sin(state.animTime * 6) * 0.1})`;
             ctx.fillRect(0, 0, W, H);
         }
+    }
+
+    let bgGrad = null;
+    const stars = Array.from({ length: 50 }, () => ({ x: Math.random() * W, y: Math.random() * H, s: 6 + Math.random() * 14, a: 0.15 + Math.random() * 0.4 }));
+    function lighten(hex, amt) {
+        const n = parseInt(hex.slice(1), 16);
+        const f = (v) => Math.max(0, Math.min(255, Math.round(amt < 0 ? v * (1 + amt) : v + (255 - v) * amt)));
+        return `rgb(${f((n >> 16) & 255)},${f((n >> 8) & 255)},${f(n & 255)})`;
     }
 
     function roundRect(x, y, w, h, r) {

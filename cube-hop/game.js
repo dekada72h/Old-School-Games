@@ -53,6 +53,9 @@
         player: null,
         snakes: [],
         snakeSpawnT: 4,
+        discs: [],
+        buffered: null,
+        particles: [],
         animTime: 0,
         deathT: 0,
         deathReason: '',
@@ -131,6 +134,9 @@
         state.snakes = [];
         state.snakeSpawnT = Math.max(2, 6 - state.level * 0.5);
         state.winT = 0;
+        state.buffered = null;
+        state.particles = [];
+        state.discs = [{ r: 2, c: -1, used: false }, { r: 3, c: 4, used: false }];
         ui.levelTitle.textContent = `LEVEL ${state.level}`;
         ui.levelTag.textContent = state.level === 1 ? 'Flip them all.' :
             (state.targetState === 2 ? 'Two hops per cube now!' : 'Faster snakes.');
@@ -156,9 +162,25 @@
 
     // ---------- Movement ----------
     function jumpDir(dr, dc) {
-        if (state.player.jumpT > 0 || state.deathT > 0 || state.player.falling || state.winT > 0) return;
+        if (!state.running || state.paused) return;
+        if (state.deathT > 0 || state.player.falling || state.winT > 0 || state.player.ride) return;
+        // Buffer one input while mid-jump so the controls feel responsive
+        if (state.player.jumpT > 0) { state.buffered = { dr, dc }; return; }
         const newR = state.player.r + dr;
         const newC = state.player.c + dc;
+        // Escape disc?
+        const disc = state.discs.find(d => !d.used && d.r === newR && d.c === newC);
+        if (disc) {
+            const np = tilePos(newR, newC);
+            state.player.fromX = state.player.x;
+            state.player.fromY = state.player.y;
+            state.player.toX = np.x;
+            state.player.toY = np.y - 8;
+            state.player.jumpT = 0.32;
+            state.player.disc = disc;
+            blip(990, 0.08, 'triangle');
+            return;
+        }
         // Off-pyramid?
         if (!isValidTile(newR, newC)) {
             // Jump and fall off
@@ -273,6 +295,32 @@
             return;
         }
 
+        // Disc ride
+        if (state.player.ride) {
+            const rd = state.player.ride;
+            rd.t += dt / 1.1;
+            const k = Math.min(1, rd.t);
+            const top = tilePos(0, 0);
+            state.player.x = rd.fromX + (top.x - rd.fromX) * k;
+            state.player.y = rd.fromY + (top.y - 8 - rd.fromY) * k - Math.sin(k * Math.PI) * 40;
+            if (k >= 1) {
+                state.player.ride = null;
+                state.player.r = 0; state.player.c = 0;
+                state.player.x = top.x; state.player.y = top.y - 8;
+                state.snakeSpawnT = Math.max(state.snakeSpawnT, 3);
+                blip(880, 0.1, 'triangle');
+            }
+            return;
+        }
+
+        // Particles
+        for (let i = state.particles.length - 1; i >= 0; i--) {
+            const p = state.particles[i];
+            p.age += dt;
+            if (p.age >= p.life) { state.particles.splice(i, 1); continue; }
+            p.x += p.vx * dt; p.y += p.vy * dt; p.vy += 500 * dt;
+        }
+
         // Player jump animation
         if (state.player.jumpT > 0) {
             state.player.jumpT -= dt;
@@ -288,8 +336,23 @@
                 if (state.player.falling) {
                     // Continue falling off-screen
                     state.player.fallY = 0;
+                } else if (state.player.disc) {
+                    // Land on the disc and ride it back to the top
+                    const d = state.player.disc;
+                    d.used = true;
+                    state.player.disc = null;
+                    state.player.ride = { t: 0, fromX: state.player.x, fromY: state.player.y };
+                    // Snakes fall off when the disc lifts you away
+                    for (const sn of state.snakes) {
+                        state.score += 500;
+                        for (let q = 0; q < 14; q++) state.particles.push({ x: sn.x, y: sn.y, vx: (Math.random() - 0.5) * 260, vy: (Math.random() - 0.7) * 260, age: 0, life: 0.7, color: COLORS.snake });
+                    }
+                    if (state.snakes.length) blip(1320, 0.2, 'square');
+                    state.snakes = [];
+                    updateHud();
                 } else {
                     landOnCube();
+                    if (state.buffered) { const b = state.buffered; state.buffered = null; jumpDir(b.dr, b.dc); }
                 }
             }
         } else if (state.player.falling) {
@@ -334,6 +397,7 @@
         if (state.deathT > 0) return;
         state.deathT = 1.0;
         state.deathReason = reason;
+        state.buffered = null;
         const runId = state.runId;
         for (let i = 0; i < 4; i++) setTimeout(() => {
             if (state.runId !== runId) return;
@@ -363,17 +427,26 @@
     }
 
     // ---------- Render ----------
-    function render() {
-        ctx.fillStyle = COLORS.bg;
-        ctx.fillRect(0, 0, W, H);
+    let bgGrad = null;
+    const bgStars = Array.from({ length: 70 }, (_, i) => ({ x: (i * 137) % W, y: (i * 79) % H, a: 0.2 + (i % 4) * 0.12 }));
 
-        // Stars
-        ctx.fillStyle = 'rgba(255,255,255,0.4)';
-        for (let i = 0; i < 40; i++) {
-            const x = (i * 137) % W;
-            const y = (i * 79) % H;
-            ctx.fillRect(x, y, 1, 1);
+    function render() {
+        if (!bgGrad) {
+            bgGrad = ctx.createLinearGradient(0, 0, 0, H);
+            bgGrad.addColorStop(0, '#0d0828');
+            bgGrad.addColorStop(1, '#030108');
         }
+        ctx.fillStyle = bgGrad;
+        ctx.fillRect(0, 0, W, H);
+        for (const st of bgStars) {
+            ctx.globalAlpha = st.a * (0.7 + 0.3 * Math.sin(state.animTime * 2 + st.x));
+            ctx.fillStyle = '#fff';
+            ctx.fillRect(st.x, st.y, 1.5, 1.5);
+        }
+        ctx.globalAlpha = 1;
+
+        // Discs (behind cubes)
+        for (const d of state.discs) if (!d.used) drawDisc(d);
 
         // Draw cubes back-to-front (top row first)
         for (let r = 0; r < ROWS; r++) {
@@ -382,37 +455,36 @@
             }
         }
 
-        // Snakes (sort by row to draw back-to-front)
         const snakesSorted = [...state.snakes].sort((a, b) => a.r - b.r);
         for (const s of snakesSorted) {
-            // Only draw snakes ahead of player based on row
             if (state.player.r >= s.r) continue;
             drawSnake(s);
         }
-
-        // Player
         drawPlayer();
-
-        // Snakes after player (in front)
         for (const s of snakesSorted) {
             if (state.player.r < s.r) continue;
             drawSnake(s);
         }
+
+        for (const p of state.particles) {
+            ctx.globalAlpha = 1 - p.age / p.life;
+            ctx.fillStyle = p.color;
+            ctx.fillRect(p.x - 2, p.y - 2, 4, 4);
+        }
+        ctx.globalAlpha = 1;
 
         // Death text
         if (state.deathT > 0) {
             ctx.fillStyle = '#ff2e63';
             ctx.font = "bold 16px 'Press Start 2P', monospace";
             ctx.textAlign = 'center';
+            ctx.shadowColor = '#000'; ctx.shadowBlur = 6;
             ctx.fillText(state.deathReason, W / 2, H - 30);
+            ctx.shadowBlur = 0;
         }
 
-        // Lives icons
-        for (let i = 0; i < state.lives - 1; i++) {
-            drawPlayerIcon(20 + i * 26, H - 24);
-        }
+        for (let i = 0; i < state.lives - 1; i++) drawPlayerIcon(20 + i * 26, H - 24);
 
-        // Win flash
         if (state.winT > 0) {
             const a = Math.sin(state.animTime * 12) * 0.3 + 0.4;
             ctx.fillStyle = `rgba(255, 138, 60, ${a * (state.winT / 1.5)})`;
@@ -420,27 +492,41 @@
         }
     }
 
+    function drawDisc(d) {
+        const p = tilePos(d.r, d.c);
+        const x = p.x, y = p.y + 4;
+        const spin = state.animTime * 4;
+        ctx.save();
+        ctx.translate(x, y);
+        ctx.shadowColor = '#ff66cc'; ctx.shadowBlur = 14;
+        for (let i = 0; i < 6; i++) {
+            const a0 = spin + (i / 6) * Math.PI * 2, a1 = spin + ((i + 1) / 6) * Math.PI * 2;
+            ctx.fillStyle = `hsl(${(i * 60 + state.animTime * 120) % 360},90%,60%)`;
+            ctx.beginPath();
+            ctx.moveTo(0, 0);
+            ctx.ellipse(0, 0, 20, 9, 0, a0, a1);
+            ctx.closePath();
+            ctx.fill();
+        }
+        ctx.restore();
+    }
+
+    function shadeHex(hex, amt) {
+        const n = parseInt(hex.slice(1), 16);
+        const f = (v) => Math.max(0, Math.min(255, Math.round(amt < 0 ? v * (1 + amt) : v + (255 - v) * amt)));
+        return `rgb(${f((n >> 16) & 255)},${f((n >> 8) & 255)},${f(n & 255)})`;
+    }
+
     function drawCube(r, c, cube) {
         const p = tilePos(r, c);
         const x = p.x, y = p.y;
-        // Top face (diamond)
         const topColor = cube.state === 0 ? COLORS.cubeTop1 :
                           cube.state === 1 ? COLORS.cubeTop2 :
                           COLORS.cubeTop3;
-        ctx.fillStyle = topColor;
-        ctx.beginPath();
-        ctx.moveTo(x, y - 14);
-        ctx.lineTo(x + TILE_W / 2, y);
-        ctx.lineTo(x, y + 14);
-        ctx.lineTo(x - TILE_W / 2, y);
-        ctx.closePath();
-        ctx.fill();
-        ctx.strokeStyle = COLORS.cubeOutline;
-        ctx.lineWidth = 1;
-        ctx.stroke();
-
         // Left face
-        ctx.fillStyle = COLORS.cubeLeft;
+        let g = ctx.createLinearGradient(x - TILE_W / 2, y, x, y + 40);
+        g.addColorStop(0, shadeHex(COLORS.cubeLeft, 0.1)); g.addColorStop(1, shadeHex(COLORS.cubeLeft, -0.3));
+        ctx.fillStyle = g;
         ctx.beginPath();
         ctx.moveTo(x - TILE_W / 2, y);
         ctx.lineTo(x, y + 14);
@@ -448,10 +534,10 @@
         ctx.lineTo(x - TILE_W / 2, y + 26);
         ctx.closePath();
         ctx.fill();
-        ctx.stroke();
-
         // Right face
-        ctx.fillStyle = COLORS.cubeRight;
+        g = ctx.createLinearGradient(x + TILE_W / 2, y, x, y + 40);
+        g.addColorStop(0, shadeHex(COLORS.cubeRight, 0.05)); g.addColorStop(1, shadeHex(COLORS.cubeRight, -0.4));
+        ctx.fillStyle = g;
         ctx.beginPath();
         ctx.moveTo(x + TILE_W / 2, y);
         ctx.lineTo(x, y + 14);
@@ -459,67 +545,98 @@
         ctx.lineTo(x + TILE_W / 2, y + 26);
         ctx.closePath();
         ctx.fill();
+        // Top face
+        g = ctx.createLinearGradient(x, y - 14, x, y + 14);
+        g.addColorStop(0, shadeHex(topColor, 0.35)); g.addColorStop(1, topColor);
+        ctx.fillStyle = g;
+        if (cube.state > 0) { ctx.shadowColor = topColor; ctx.shadowBlur = 8; }
+        ctx.beginPath();
+        ctx.moveTo(x, y - 14);
+        ctx.lineTo(x + TILE_W / 2, y);
+        ctx.lineTo(x, y + 14);
+        ctx.lineTo(x - TILE_W / 2, y);
+        ctx.closePath();
+        ctx.fill();
+        ctx.shadowBlur = 0;
+        ctx.strokeStyle = 'rgba(10,6,23,0.85)';
+        ctx.lineWidth = 1.2;
         ctx.stroke();
+        // edges
+        ctx.beginPath();
+        ctx.moveTo(x - TILE_W / 2, y); ctx.lineTo(x - TILE_W / 2, y + 26); ctx.lineTo(x, y + 40); ctx.lineTo(x + TILE_W / 2, y + 26); ctx.lineTo(x + TILE_W / 2, y);
+        ctx.moveTo(x, y + 14); ctx.lineTo(x, y + 40);
+        ctx.stroke();
+        // top-edge highlight
+        ctx.strokeStyle = 'rgba(255,255,255,0.35)';
+        ctx.beginPath(); ctx.moveTo(x - TILE_W / 2, y); ctx.lineTo(x, y - 14); ctx.lineTo(x + TILE_W / 2, y); ctx.stroke();
+    }
+
+    function shadowAt(x, y, r) {
+        ctx.fillStyle = 'rgba(0,0,0,0.35)';
+        ctx.beginPath(); ctx.ellipse(x, y, r, r * 0.4, 0, 0, Math.PI * 2); ctx.fill();
     }
 
     function drawPlayer() {
         const p = state.player;
-        // Body
+        if (state.deathT > 0 && !p.falling) ctx.globalAlpha = Math.max(0.2, state.deathT);
+        // ground shadow on the cube top when standing
+        if (!p.falling && p.jumpT <= 0 && !p.ride) shadowAt(p.x, p.y + 8, 13);
+        ctx.save();
+        ctx.shadowColor = COLORS.player; ctx.shadowBlur = 12;
+        const g = ctx.createRadialGradient(p.x - 5, p.y - 6, 2, p.x, p.y, 16);
+        g.addColorStop(0, '#ffc08a'); g.addColorStop(1, COLORS.playerDark);
+        ctx.fillStyle = g;
+        ctx.beginPath(); ctx.arc(p.x, p.y, 14, 0, Math.PI * 2); ctx.fill();
+        ctx.restore();
+        // feet
+        ctx.fillStyle = '#7a2e0a';
+        ctx.fillRect(p.x - 9, p.y + 11, 6, 4); ctx.fillRect(p.x + 3, p.y + 11, 6, 4);
+        // snout
         ctx.fillStyle = COLORS.player;
-        ctx.beginPath();
-        ctx.arc(p.x, p.y, 14, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.fillStyle = COLORS.playerDark;
-        ctx.beginPath();
-        ctx.arc(p.x, p.y + 4, 14, 0, Math.PI);
-        ctx.fill();
-        // Snout
-        ctx.fillStyle = COLORS.player;
-        ctx.fillRect(p.x - 4, p.y + 2, 8, 6);
-        // Eyes
+        ctx.beginPath(); ctx.ellipse(p.x, p.y + 5, 9, 5, 0, 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = '#7a2e0a';
+        ctx.beginPath(); ctx.ellipse(p.x, p.y + 8, 3, 2, 0, 0, Math.PI * 2); ctx.fill();
+        // eyes
         ctx.fillStyle = '#fff';
-        ctx.fillRect(p.x - 7, p.y - 6, 5, 4);
-        ctx.fillRect(p.x + 2, p.y - 6, 5, 4);
+        ctx.beginPath(); ctx.ellipse(p.x - 5, p.y - 5, 4, 5, 0, 0, 7); ctx.ellipse(p.x + 5, p.y - 5, 4, 5, 0, 0, 7); ctx.fill();
         ctx.fillStyle = '#0a0617';
-        ctx.fillRect(p.x - 5, p.y - 5, 2, 2);
-        ctx.fillRect(p.x + 4, p.y - 5, 2, 2);
+        ctx.beginPath(); ctx.arc(p.x - 4, p.y - 4, 2, 0, 7); ctx.arc(p.x + 6, p.y - 4, 2, 0, 7); ctx.fill();
+        ctx.globalAlpha = 1;
     }
 
     function drawPlayerIcon(x, y) {
         ctx.fillStyle = COLORS.player;
-        ctx.beginPath();
-        ctx.arc(x, y, 7, 0, Math.PI * 2);
-        ctx.fill();
+        ctx.beginPath(); ctx.arc(x, y, 8, 0, Math.PI * 2); ctx.fill();
         ctx.fillStyle = '#fff';
-        ctx.fillRect(x - 3, y - 3, 2, 2);
-        ctx.fillRect(x + 1, y - 3, 2, 2);
+        ctx.beginPath(); ctx.arc(x - 3, y - 2, 2, 0, 7); ctx.arc(x + 3, y - 2, 2, 0, 7); ctx.fill();
+        ctx.fillStyle = COLORS.playerDark;
+        ctx.fillRect(x - 3, y + 2, 6, 3);
     }
 
     function drawSnake(s) {
-        // Body (sphere)
-        ctx.fillStyle = COLORS.snake;
-        ctx.beginPath();
-        ctx.arc(s.x, s.y, 14, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.fillStyle = COLORS.snakeDark;
-        ctx.beginPath();
-        ctx.arc(s.x, s.y + 4, 14, 0, Math.PI);
-        ctx.fill();
-        // Eyes (angry)
+        if (s.jumpT <= 0) shadowAt(s.x, s.y + 8, 12);
+        const bob = Math.sin(state.animTime * 8) * 1.5;
+        ctx.save();
+        ctx.shadowColor = COLORS.snake; ctx.shadowBlur = 12;
+        const g = ctx.createRadialGradient(s.x - 5, s.y - 6 + bob, 2, s.x, s.y + bob, 16);
+        g.addColorStop(0, '#ffb3e6'); g.addColorStop(1, COLORS.snakeDark);
+        ctx.fillStyle = g;
+        ctx.beginPath(); ctx.arc(s.x, s.y + bob, 14, 0, Math.PI * 2); ctx.fill();
+        ctx.restore();
+        // coils
+        ctx.strokeStyle = 'rgba(60,20,110,0.5)'; ctx.lineWidth = 2;
+        ctx.beginPath(); ctx.arc(s.x, s.y + bob + 4, 10, 0.2, Math.PI - 0.2); ctx.stroke();
+        // eyes
         ctx.fillStyle = '#fff';
-        ctx.fillRect(s.x - 7, s.y - 6, 5, 4);
-        ctx.fillRect(s.x + 2, s.y - 6, 5, 4);
+        ctx.beginPath(); ctx.ellipse(s.x - 5, s.y - 5 + bob, 4, 4.5, 0, 0, 7); ctx.ellipse(s.x + 5, s.y - 5 + bob, 4, 4.5, 0, 0, 7); ctx.fill();
         ctx.fillStyle = '#ff2e63';
-        ctx.fillRect(s.x - 5, s.y - 5, 2, 2);
-        ctx.fillRect(s.x + 4, s.y - 5, 2, 2);
-        // Crown spike
+        ctx.beginPath(); ctx.arc(s.x - 4, s.y - 4 + bob, 2, 0, 7); ctx.arc(s.x + 6, s.y - 4 + bob, 2, 0, 7); ctx.fill();
+        // angry brow
+        ctx.strokeStyle = '#2a0a4a'; ctx.lineWidth = 2;
+        ctx.beginPath(); ctx.moveTo(s.x - 9, s.y - 11 + bob); ctx.lineTo(s.x - 2, s.y - 8 + bob); ctx.moveTo(s.x + 9, s.y - 11 + bob); ctx.lineTo(s.x + 2, s.y - 8 + bob); ctx.stroke();
+        // crown spike
         ctx.fillStyle = COLORS.snakeDark;
-        ctx.beginPath();
-        ctx.moveTo(s.x - 4, s.y - 12);
-        ctx.lineTo(s.x, s.y - 18);
-        ctx.lineTo(s.x + 4, s.y - 12);
-        ctx.closePath();
-        ctx.fill();
+        ctx.beginPath(); ctx.moveTo(s.x - 5, s.y - 12 + bob); ctx.lineTo(s.x, s.y - 20 + bob); ctx.lineTo(s.x + 5, s.y - 12 + bob); ctx.closePath(); ctx.fill();
     }
 
     let last = performance.now();
@@ -527,6 +644,7 @@
         const dt = Math.min(0.05, (now - last) / 1000);
         last = now;
         if (state.running && !state.paused && !state.gameover) step(dt);
+        else state.animTime += dt;
         render();
         requestAnimationFrame(loop);
     }
@@ -539,6 +657,10 @@
         else if (k === 'ArrowLeft' || k === 'a' || k === 'A') jumpDir(-1, -1);  // up-left
         else if (k === 'ArrowDown' || k === 's' || k === 'S') jumpDir(1, 0);    // down-left
         else if (k === 'ArrowRight' || k === 'd' || k === 'D') jumpDir(1, 1);   // down-right
+        else if (k === 'q' || k === 'Q' || k === '7') jumpDir(-1, -1);
+        else if (k === 'e' || k === 'E' || k === '9') jumpDir(-1, 0);
+        else if (k === 'z' || k === 'Z' || k === '1') jumpDir(1, 0);
+        else if (k === 'c' || k === 'C' || k === '3') jumpDir(1, 1);
         else if (k === 'p' || k === 'P' || k === 'Escape') togglePause();
         else if (k === 'r' || k === 'R') restart();
     });
@@ -568,6 +690,7 @@
         if (!state.paused) last = performance.now();
     }
     function restart() {
+        ui.oTitle.classList.add('hidden');
         ui.oOver.classList.add('hidden');
         ui.oPause.classList.add('hidden');
         ui.oLevel.classList.add('hidden');

@@ -161,10 +161,7 @@ body {
 .game-frame:fullscreen canvas#game,
 .game-frame:-webkit-full-screen canvas#game {
     max-width: 100%;
-    max-height: calc(100vh - 130px);
-    width: auto;
     height: auto;
-    object-fit: contain;
 }
 .game-frame:fullscreen .hud {
     width: min(900px, 100%);

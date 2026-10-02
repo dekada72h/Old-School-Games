@@ -58,7 +58,8 @@
         keyL: false, keyR: false, keyFire: false,
         fireCooldown: 0,
         deathT: 0,
-        stageReadyT: 0
+        stageReadyT: 0,
+        invuln: 0
     };
 
     const KEY = 'osg.wing-squad.hs';
@@ -170,6 +171,7 @@
         state.enemyBullets = [];
         state.particles = [];
         state.player = spawnPlayer();
+        state.invuln = 1.5;
         spawnStars();
         startStage();
         updateHud();
@@ -182,6 +184,21 @@
     }
 
     // ---------- Update ----------
+    function movePlayer(dt) {
+        if (!state.player.alive) return;
+        const sp = 320;
+        if (state.keyL) state.player.x -= sp * dt;
+        if (state.keyR) state.player.x += sp * dt;
+        state.player.x = Math.max(state.player.w / 2 + 8, Math.min(W - state.player.w / 2 - 8, state.player.x));
+
+        state.fireCooldown -= dt;
+        if (state.keyFire && state.fireCooldown <= 0 && state.bullets.length < 3) {
+            state.bullets.push({ x: state.player.x, y: state.player.y - 14, vy: -640 });
+            state.fireCooldown = 0.16;
+            blip(880, 0.04, 'square');
+        }
+    }
+
     function step(dt) {
         state.animTime += dt;
 
@@ -199,8 +216,12 @@
 
         // Hold gameplay during the "STAGE N" overlay so enemies don't spawn/attack
         // before the player can see them.
+        if (state.invuln > 0) state.invuln -= dt;
         if (state.stageReadyT > 0) {
             state.stageReadyT -= dt;
+            movePlayer(dt);
+            // bullets keep flying so the ship feels alive during the intro
+            for (let i = state.bullets.length - 1; i >= 0; i--) { state.bullets[i].y += state.bullets[i].vy * dt; if (state.bullets[i].y < 0) state.bullets.splice(i, 1); }
             return;
         }
 
@@ -335,37 +356,26 @@
             }
 
             // Collision with player
-            if (state.player.alive && e.state !== 'entering' &&
+            if (state.player.alive && state.invuln <= 0 && e.state !== 'entering' &&
                 Math.hypot(e.x - state.player.x, e.y - state.player.y) < 22) {
                 playerDie();
                 return;
             }
         }
 
-        // Player movement
-        if (state.player.alive) {
-            const sp = 320;
-            if (state.keyL) state.player.x -= sp * dt;
-            if (state.keyR) state.player.x += sp * dt;
-            state.player.x = Math.max(state.player.w / 2 + 8, Math.min(W - state.player.w / 2 - 8, state.player.x));
-
-            state.fireCooldown -= dt;
-            if (state.keyFire && state.fireCooldown <= 0 && state.bullets.length < 2) {
-                state.bullets.push({ x: state.player.x, y: state.player.y - 14, vy: -640 });
-                state.fireCooldown = 0.18;
-                blip(880, 0.04, 'square');
-            }
-        }
+        movePlayer(dt);
 
         // Player bullets
         for (let i = state.bullets.length - 1; i >= 0; i--) {
             const b = state.bullets[i];
+            const prevY = b.y;
             b.y += b.vy * dt;
             if (b.y < 0) { state.bullets.splice(i, 1); continue; }
+            const yLo = Math.min(prevY, b.y) - 16, yHi = Math.max(prevY, b.y) + 16;
             for (let j = state.enemies.length - 1; j >= 0; j--) {
                 const e = state.enemies[j];
                 if (e.state === 'entering') continue;
-                if (Math.abs(e.x - b.x) < 16 && Math.abs(e.y - b.y) < 16) {
+                if (Math.abs(e.x - b.x) < 16 && e.y > yLo && e.y < yHi) {
                     const points = e.basePoints * (e.state === 'diving' ? 2 : 1);
                     state.score += points;
                     spawnExplosion(e.x, e.y, e.type === 'flag' ? COLORS.flag : (e.type === 'fighter' ? COLORS.fighter : COLORS.drone));
@@ -384,7 +394,7 @@
             b.x += b.vx * dt;
             b.y += b.vy * dt;
             if (b.y > H || b.x < 0 || b.x > W) { state.eBullets.splice(i, 1); continue; }
-            if (state.player.alive && Math.hypot(b.x - state.player.x, b.y - state.player.y) < 16) {
+            if (state.player.alive && state.invuln <= 0 && Math.hypot(b.x - state.player.x, b.y - state.player.y) < 16) {
                 state.eBullets.splice(i, 1);
                 playerDie();
                 return;
@@ -441,20 +451,34 @@
             setTimeout(() => ui.oOver.classList.remove('hidden'), 300);
         } else {
             state.player = spawnPlayer();
+            state.invuln = 2.2;
         }
         updateHud();
     }
 
     // ---------- Render ----------
+    let bgGrad = null;
     function render() {
-        ctx.fillStyle = COLORS.bg;
+        if (!bgGrad) {
+            bgGrad = ctx.createLinearGradient(0, 0, 0, H);
+            bgGrad.addColorStop(0, '#0a0524');
+            bgGrad.addColorStop(1, '#030109');
+        }
+        ctx.fillStyle = bgGrad;
         ctx.fillRect(0, 0, W, H);
+        const neb = ctx.createRadialGradient(W * 0.75, H * 0.3, 10, W * 0.75, H * 0.3, 280);
+        neb.addColorStop(0, 'rgba(155,107,255,0.12)'); neb.addColorStop(1, 'rgba(155,107,255,0)');
+        ctx.fillStyle = neb; ctx.fillRect(0, 0, W, H);
+        const neb2 = ctx.createRadialGradient(W * 0.15, H * 0.7, 10, W * 0.15, H * 0.7, 240);
+        neb2.addColorStop(0, 'rgba(95,208,255,0.09)'); neb2.addColorStop(1, 'rgba(95,208,255,0)');
+        ctx.fillStyle = neb2; ctx.fillRect(0, 0, W, H);
 
-        // Stars
+        // Stars (parallax streaks)
         for (const s of state.stars) {
             ctx.globalAlpha = 0.3 + s.z * 0.7;
             ctx.fillStyle = '#fff';
-            ctx.fillRect(s.x, s.y, 1 + Math.floor(s.z * 1.5), 1 + Math.floor(s.z * 1.5));
+            const len = 1 + s.z * 4;
+            ctx.fillRect(s.x, s.y, 1 + Math.floor(s.z * 1.5), len);
         }
         ctx.globalAlpha = 1;
 
@@ -463,17 +487,19 @@
             ctx.save();
             ctx.translate(e.x, e.y);
             ctx.rotate(e.angle);
-            drawEnemy(e.type);
+            drawEnemy(e.type, e);
             ctx.restore();
         }
 
         // Player bullets
+        ctx.shadowColor = '#5fd0ff'; ctx.shadowBlur = 10;
         ctx.fillStyle = COLORS.bullet;
         for (const b of state.bullets) ctx.fillRect(b.x - 1.5, b.y - 8, 3, 16);
-
         // Enemy bullets
+        ctx.shadowColor = COLORS.enemyBullet;
         ctx.fillStyle = COLORS.enemyBullet;
-        for (const b of state.eBullets) ctx.fillRect(b.x - 2, b.y - 4, 4, 8);
+        for (const b of state.eBullets) { ctx.beginPath(); ctx.arc(b.x, b.y, 4, 0, Math.PI * 2); ctx.fill(); }
+        ctx.shadowBlur = 0;
 
         // Particles
         for (const p of state.particles) {
@@ -485,90 +511,115 @@
 
         // Player
         if (state.player.alive) {
-            const p = state.player;
-            // Thrust
-            ctx.fillStyle = COLORS.thrust;
-            ctx.fillRect(p.x - 2, p.y + 12, 4, 6 + Math.sin(state.animTime * 30) * 2);
-            ctx.fillStyle = COLORS.player;
-            ctx.beginPath();
-            ctx.moveTo(p.x, p.y - 14);
-            ctx.lineTo(p.x - 14, p.y + 12);
-            ctx.lineTo(p.x - 6, p.y + 8);
-            ctx.lineTo(p.x + 6, p.y + 8);
-            ctx.lineTo(p.x + 14, p.y + 12);
-            ctx.closePath();
-            ctx.fill();
-            ctx.fillStyle = COLORS.playerDark;
-            ctx.fillRect(p.x - 14, p.y + 8, 28, 4);
-            ctx.fillStyle = '#fff';
-            ctx.fillRect(p.x - 1.5, p.y - 4, 3, 6);
+            if (!(state.invuln > 0 && Math.floor(state.animTime * 14) % 2 === 0)) drawShip(state.player.x, state.player.y, 1, true);
         }
 
         // Lives
-        for (let i = 0; i < state.lives - 1; i++) {
-            ctx.save();
-            ctx.translate(20 + i * 24, H - 16);
-            ctx.scale(0.6, 0.6);
-            ctx.fillStyle = COLORS.player;
-            ctx.beginPath();
-            ctx.moveTo(0, -14);
-            ctx.lineTo(-14, 12);
-            ctx.lineTo(-6, 8);
-            ctx.lineTo(6, 8);
-            ctx.lineTo(14, 12);
-            ctx.closePath();
-            ctx.fill();
-            ctx.restore();
-        }
+        for (let i = 0; i < state.lives - 1; i++) drawShip(20 + i * 26, H - 16, 0.55, false);
     }
 
-    function drawEnemy(type) {
+    function drawShip(x, y, sc, flame) {
+        ctx.save();
+        ctx.translate(x, y);
+        ctx.scale(sc, sc);
+        if (flame) {
+            const fl = 8 + Math.sin(state.animTime * 40) * 3;
+            const fg = ctx.createLinearGradient(0, 8, 0, 8 + fl + 6);
+            fg.addColorStop(0, 'rgba(255,220,120,0.95)');
+            fg.addColorStop(1, 'rgba(255,46,99,0)');
+            ctx.fillStyle = fg;
+            ctx.beginPath(); ctx.moveTo(-4, 8); ctx.lineTo(0, 8 + fl + 6); ctx.lineTo(4, 8); ctx.fill();
+        }
+        ctx.shadowColor = COLORS.player; ctx.shadowBlur = 14;
+        const g = ctx.createLinearGradient(0, -14, 0, 12);
+        g.addColorStop(0, '#d8f4ff');
+        g.addColorStop(1, COLORS.playerDark);
+        ctx.fillStyle = g;
+        ctx.beginPath();
+        ctx.moveTo(0, -15);
+        ctx.lineTo(4, -4);
+        ctx.lineTo(15, 10);
+        ctx.lineTo(15, 13);
+        ctx.lineTo(6, 9);
+        ctx.lineTo(-6, 9);
+        ctx.lineTo(-15, 13);
+        ctx.lineTo(-15, 10);
+        ctx.lineTo(-4, -4);
+        ctx.closePath();
+        ctx.fill();
+        ctx.shadowBlur = 0;
+        ctx.fillStyle = '#ff2e63';
+        ctx.fillRect(-15, 9, 3, 4);
+        ctx.fillRect(12, 9, 3, 4);
+        ctx.fillStyle = 'rgba(10,6,23,0.85)';
+        ctx.beginPath(); ctx.ellipse(0, -2, 2.5, 5.5, 0, 0, Math.PI * 2); ctx.fill();
+        ctx.restore();
+    }
+
+    function drawEnemy(type, e) {
+        const flap = Math.sin(state.animTime * 12 + (e.formCol || 0)) * 0.25;
+        ctx.shadowBlur = 10;
         if (type === 'flag') {
-            // Flagship — bee-like with wings
+            ctx.shadowColor = COLORS.flag;
             ctx.fillStyle = COLORS.flagWing;
-            ctx.beginPath();
-            ctx.ellipse(-14, 0, 8, 12, 0, 0, Math.PI * 2);
-            ctx.ellipse(14, 0, 8, 12, 0, 0, Math.PI * 2);
-            ctx.fill();
-            ctx.fillStyle = COLORS.flag;
-            ctx.beginPath();
-            ctx.ellipse(0, 0, 12, 14, 0, 0, Math.PI * 2);
-            ctx.fill();
+            ctx.save(); ctx.rotate(flap); ctx.beginPath(); ctx.ellipse(-15, 0, 7, 13, 0.2, 0, Math.PI * 2); ctx.fill(); ctx.restore();
+            ctx.save(); ctx.rotate(-flap); ctx.beginPath(); ctx.ellipse(15, 0, 7, 13, -0.2, 0, Math.PI * 2); ctx.fill(); ctx.restore();
+            const g = ctx.createRadialGradient(-3, -4, 1, 0, 0, 15);
+            g.addColorStop(0, '#ffc2ea'); g.addColorStop(1, COLORS.flag);
+            ctx.fillStyle = g;
+            ctx.beginPath(); ctx.ellipse(0, 0, 11, 14, 0, 0, Math.PI * 2); ctx.fill();
+            ctx.shadowBlur = 0;
             ctx.fillStyle = '#fff';
-            ctx.fillRect(-3, -4, 2, 4);
-            ctx.fillRect(1, -4, 2, 4);
+            ctx.beginPath(); ctx.arc(-4, 3, 3, 0, 7); ctx.arc(4, 3, 3, 0, 7); ctx.fill();
+            ctx.fillStyle = '#220018';
+            ctx.beginPath(); ctx.arc(-4, 4, 1.4, 0, 7); ctx.arc(4, 4, 1.4, 0, 7); ctx.fill();
+            ctx.strokeStyle = COLORS.flag; ctx.lineWidth = 1.5;
+            ctx.beginPath(); ctx.moveTo(-3, -13); ctx.lineTo(-6, -19); ctx.moveTo(3, -13); ctx.lineTo(6, -19); ctx.stroke();
         } else if (type === 'fighter') {
-            ctx.fillStyle = COLORS.fighter;
+            ctx.shadowColor = COLORS.fighter;
+            const g = ctx.createLinearGradient(0, -14, 0, 10);
+            g.addColorStop(0, '#fff0b8'); g.addColorStop(1, '#d49a1f');
+            ctx.fillStyle = g;
             ctx.beginPath();
             ctx.moveTo(0, -14);
-            ctx.lineTo(-12, 6);
-            ctx.lineTo(-6, 10);
-            ctx.lineTo(6, 10);
-            ctx.lineTo(12, 6);
+            ctx.lineTo(-13 - flap * 6, 4);
+            ctx.lineTo(-8, 11);
+            ctx.lineTo(0, 7);
+            ctx.lineTo(8, 11);
+            ctx.lineTo(13 + flap * 6, 4);
             ctx.closePath();
             ctx.fill();
+            ctx.shadowBlur = 0;
             ctx.fillStyle = '#3a2700';
-            ctx.fillRect(-3, -6, 6, 4);
+            ctx.beginPath(); ctx.ellipse(0, -3, 3, 5, 0, 0, 7); ctx.fill();
+            ctx.fillStyle = '#ff2e63';
+            ctx.fillRect(-2, -6, 4, 2);
         } else {
-            ctx.fillStyle = COLORS.drone;
+            ctx.shadowColor = COLORS.drone;
+            const g = ctx.createLinearGradient(0, -10, 0, 9);
+            g.addColorStop(0, '#9dffd9'); g.addColorStop(1, '#1d9d6e');
+            ctx.fillStyle = g;
             ctx.beginPath();
-            ctx.moveTo(0, -10);
-            ctx.lineTo(-10, 0);
-            ctx.lineTo(-6, 8);
-            ctx.lineTo(6, 8);
-            ctx.lineTo(10, 0);
+            ctx.moveTo(0, -11);
+            ctx.lineTo(-11 - flap * 4, -1);
+            ctx.lineTo(-6, 9);
+            ctx.lineTo(6, 9);
+            ctx.lineTo(11 + flap * 4, -1);
             ctx.closePath();
             ctx.fill();
+            ctx.shadowBlur = 0;
             ctx.fillStyle = '#03251a';
-            ctx.fillRect(-2, -4, 4, 4);
+            ctx.fillRect(-4, -4, 3, 4); ctx.fillRect(1, -4, 3, 4);
         }
+        ctx.shadowBlur = 0;
     }
 
     let last = performance.now();
     function loop(now) {
         const dt = Math.min(0.05, (now - last) / 1000);
         last = now;
-        if (state.running && !state.paused && !state.gameover) step(dt);
+        if (state.running && !state.paused && !state.gameover) { step(dt); updateHud(); }
+        else state.animTime += dt;
         render();
         requestAnimationFrame(loop);
     }
@@ -624,6 +675,7 @@
         if (!state.paused) last = performance.now();
     }
     function restart() {
+        ui.oTitle.classList.add('hidden');
         ui.oOver.classList.add('hidden');
         ui.oPause.classList.add('hidden');
         ui.oStage.classList.add('hidden');

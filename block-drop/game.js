@@ -153,7 +153,13 @@
         animTime: 0,
         bag: [],
         softDrop: false,
-        lastClearWasTetris: false  // for back-to-back bonus
+        lastClearWasTetris: false,  // for back-to-back bonus
+        lockT: 0,
+        lockResets: 0,
+        particles: [],
+        trail: null,
+        combo: -1,
+        flash: 0
     };
 
     function emptyBoard() {
@@ -244,6 +250,9 @@
             setTimeout(() => ui.oOver.classList.remove('hidden'), 500);
         }
         state.active = a;
+        state.dropTimer = 0;
+        state.lockT = 0;
+        state.lockResets = 0;
     }
 
     function getCells(piece) {
@@ -269,17 +278,25 @@
         if (collides(state.active, dx, dy)) return false;
         state.active.x += dx;
         state.active.y += dy;
+        if (dx !== 0) bumpLock();
         return true;
+    }
+
+    // Lock delay: successful lateral moves / rotations while grounded buy a bit more time (max 15)
+    function bumpLock() {
+        if (state.lockT > 0 && state.lockResets < 15) { state.lockT = 0; state.lockResets++; }
     }
 
     function rotate(dr) {
         if (!state.active || state.active.type === 'O') return;
         // Wall kicks: try original, then ±1, ±2 horizontally
-        const kicks = [0, 1, -1, 2, -2];
-        for (const k of kicks) {
-            if (!collides(state.active, k, 0, dr)) {
-                state.active.x += k;
+        const kicks = [[0, 0], [1, 0], [-1, 0], [2, 0], [-2, 0], [0, -1], [1, -1], [-1, -1]];
+        for (const [kx, ky] of kicks) {
+            if (!collides(state.active, kx, ky, dr)) {
+                state.active.x += kx;
+                state.active.y += ky;
                 state.active.rot = (state.active.rot + dr + 4) % 4;
+                bumpLock();
                 blip(440, 0.04, 'square', 0.04);
                 return;
             }
@@ -289,8 +306,10 @@
     function hardDrop() {
         if (!state.active) return;
         let cells = 0;
+        const startCells = getCells(state.active);
         while (move(0, 1)) cells++;
         state.score += cells * 2;
+        if (cells > 0) state.trail = { cells: startCells, color: PIECES[state.active.type].color, t: 0, dist: cells };
         lock();
         blip(140, 0.08, 'sawtooth', 0.06);
     }
@@ -342,6 +361,13 @@
 
         if (fullRows.length > 0) {
             state.clearAnim = { rows: fullRows, t: 0 };
+            for (const r of fullRows) for (let c = 0; c < COLS; c++) {
+                const col = state.board[r][c];
+                for (let q = 0; q < 2; q++) state.particles.push({ x: c * CELL + CELL / 2, y: r * CELL + CELL / 2, vx: (Math.random() - 0.5) * 380, vy: (Math.random() - 0.8) * 320, age: 0, life: 0.5 + Math.random() * 0.4, color: col });
+            }
+            state.flash = 1;
+            state.combo++;
+            if (state.combo > 0) state.score += 50 * state.combo * state.level;
             state.shake = Math.min(14, fullRows.length * 4);
             const isTetris = fullRows.length === 4;
             const points = [0, 100, 300, 500, 800][fullRows.length] * state.level;
@@ -363,14 +389,20 @@
             state.lastClearWasTetris = isTetris;
         } else {
             state.lastClearWasTetris = false;
+            state.combo = -1;
         }
 
         state.pieces++;
         state.canHold = true;
-        ensureNext();
-        spawnActive(state.next.shift());
         bump();
         updateHud();
+        if (state.clearAnim) {
+            // Spawn the next piece only after the rows are gone, so the spawn check sees the real board
+            state.active = null;
+        } else {
+            ensureNext();
+            spawnActive(state.next.shift());
+        }
     }
 
     function commitClear() {
@@ -379,6 +411,8 @@
         for (const r of rows) state.board.splice(r, 1);
         for (let i = 0; i < rows.length; i++) state.board.unshift(Array(COLS).fill(null));
         state.clearAnim = null;
+        ensureNext();
+        spawnActive(state.next.shift());
     }
 
     function updateHud() {
@@ -412,21 +446,34 @@
             if (state.clearAnim) {
                 state.clearAnim.t += dt;
                 if (state.clearAnim.t > 0.35) commitClear();
-            } else {
+            } else if (state.active) {
                 const speed = state.softDrop ? Math.min(0.04, fallSpeed() * 0.1) : fallSpeed();
-                state.dropTimer += dt;
-                while (state.dropTimer >= speed) {
-                    state.dropTimer -= speed;
-                    if (state.active) {
-                        if (collides(state.active, 0, 1)) {
-                            lock();
-                            break;
-                        } else {
-                            state.active.y += 1;
-                        }
+                if (collides(state.active, 0, 1)) {
+                    // Grounded: lock after a short delay (reset by moves/rotations)
+                    state.lockT += dt;
+                    if (state.lockT >= 0.5 || (state.softDrop && state.lockT >= 0.12)) { lock(); state.lockT = 0; }
+                } else {
+                    state.lockT = 0;
+                    state.dropTimer += dt;
+                    while (state.dropTimer >= speed && state.active) {
+                        state.dropTimer -= speed;
+                        if (collides(state.active, 0, 1)) break;
+                        state.active.y += 1;
+                        if (state.softDrop) state.score += 1;
                     }
                 }
             }
+
+            // visual-only timers
+            for (let i = state.particles.length - 1; i >= 0; i--) {
+                const p = state.particles[i];
+                p.age += dt;
+                if (p.age >= p.life) { state.particles.splice(i, 1); continue; }
+                p.x += p.vx * dt; p.y += p.vy * dt; p.vy += 700 * dt;
+            }
+            if (state.trail) { state.trail.t += dt; if (state.trail.t > 0.18) state.trail = null; }
+            if (state.flash > 0) state.flash = Math.max(0, state.flash - dt * 4);
+            updateHud();
 
             if (state.shake > 0) state.shake = Math.max(0, state.shake - dt * 30);
         }
@@ -438,77 +485,131 @@
     }
 
     // ---------- Render ----------
+    let bgGrad = null;
     function render() {
         ctx.save();
         if (state.shake > 0) ctx.translate((Math.random() - 0.5) * state.shake, (Math.random() - 0.5) * state.shake);
 
-        ctx.fillStyle = COLORS.bg;
+        if (!bgGrad) {
+            bgGrad = ctx.createLinearGradient(0, 0, 0, cv.height);
+            bgGrad.addColorStop(0, '#0b0722');
+            bgGrad.addColorStop(1, '#050208');
+        }
+        ctx.fillStyle = bgGrad;
         ctx.fillRect(0, 0, cv.width, cv.height);
 
         // Grid
         ctx.strokeStyle = COLORS.grid;
         ctx.lineWidth = 1;
         ctx.beginPath();
-        for (let x = 0; x <= COLS; x++) {
-            ctx.moveTo(x * CELL + 0.5, 0);
-            ctx.lineTo(x * CELL + 0.5, cv.height);
-        }
-        for (let y = 0; y <= ROWS; y++) {
-            ctx.moveTo(0, y * CELL + 0.5);
-            ctx.lineTo(cv.width, y * CELL + 0.5);
-        }
+        for (let x = 0; x <= COLS; x++) { ctx.moveTo(x * CELL + 0.5, 0); ctx.lineTo(x * CELL + 0.5, cv.height); }
+        for (let y = 0; y <= ROWS; y++) { ctx.moveTo(0, y * CELL + 0.5); ctx.lineTo(cv.width, y * CELL + 0.5); }
         ctx.stroke();
 
         // Settled board
         for (let r = 0; r < ROWS; r++) {
             for (let c = 0; c < COLS; c++) {
-                if (state.board[r][c]) drawCell(c, r, state.board[r][c]);
+                if (state.board[r][c]) drawCell(ctx, c * CELL, r * CELL, CELL, state.board[r][c]);
             }
+        }
+
+        // Hard-drop trail
+        if (state.trail) {
+            const k = state.trail.t / 0.18;
+            ctx.globalAlpha = 0.35 * (1 - k);
+            ctx.fillStyle = state.trail.color;
+            for (const c of state.trail.cells) {
+                if (c.y < 0) continue;
+                ctx.fillRect(c.x * CELL + 6, c.y * CELL, CELL - 12, state.trail.dist * CELL);
+            }
+            ctx.globalAlpha = 1;
         }
 
         // Clear flash
         if (state.clearAnim) {
             const k = state.clearAnim.t / 0.35;
-            ctx.fillStyle = `rgba(255,255,255,${1 - k})`;
-            for (const r of state.clearAnim.rows) ctx.fillRect(0, r * CELL, cv.width, CELL);
+            for (const r of state.clearAnim.rows) {
+                const g = ctx.createLinearGradient(0, 0, cv.width, 0);
+                g.addColorStop(0, `rgba(255,255,255,${(1 - k) * 0.4})`);
+                g.addColorStop(0.5, `rgba(255,255,255,${1 - k})`);
+                g.addColorStop(1, `rgba(255,255,255,${(1 - k) * 0.4})`);
+                ctx.fillStyle = g;
+                ctx.fillRect(0, r * CELL + k * CELL * 0.45, cv.width, CELL * (1 - k * 0.9));
+            }
         }
 
         // Ghost
         if (state.active && !state.clearAnim) {
             const ghost = { ...state.active };
             while (!collides(ghost, 0, 1)) ghost.y++;
+            const col = PIECES[state.active.type].color;
+            ctx.strokeStyle = col;
+            ctx.globalAlpha = 0.5;
+            ctx.lineWidth = 2;
             for (const c of getCells(ghost)) {
                 if (c.y < 0) continue;
-                ctx.fillStyle = COLORS.ghost;
-                ctx.fillRect(c.x * CELL + 2, c.y * CELL + 2, CELL - 4, CELL - 4);
+                ctx.strokeRect(c.x * CELL + 3, c.y * CELL + 3, CELL - 6, CELL - 6);
             }
+            ctx.globalAlpha = 1;
         }
 
-        // Active piece
+        // Active piece (dims slightly while the lock timer runs)
         if (state.active && !state.clearAnim) {
             const def = PIECES[state.active.type];
+            if (state.lockT > 0) ctx.globalAlpha = 1 - Math.min(0.35, state.lockT * 0.7);
             for (const c of getCells(state.active)) {
                 if (c.y < 0) continue;
-                drawCell(c.x, c.y, def.color);
+                drawCell(ctx, c.x * CELL, c.y * CELL, CELL, def.color);
             }
+            ctx.globalAlpha = 1;
+        }
+
+        // Particles
+        for (const p of state.particles) {
+            ctx.globalAlpha = 1 - p.age / p.life;
+            ctx.fillStyle = p.color;
+            ctx.fillRect(p.x - 3, p.y - 3, 6, 6);
+        }
+        ctx.globalAlpha = 1;
+
+        if (state.flash > 0) {
+            ctx.fillStyle = `rgba(255,255,255,${state.flash * 0.12})`;
+            ctx.fillRect(0, 0, cv.width, cv.height);
         }
 
         ctx.restore();
     }
 
-    function drawCell(x, y, color) {
-        const px = x * CELL;
-        const py = y * CELL;
-        ctx.fillStyle = color;
-        ctx.fillRect(px + 1, py + 1, CELL - 2, CELL - 2);
-        // Highlight
-        ctx.fillStyle = 'rgba(255,255,255,0.18)';
-        ctx.fillRect(px + 1, py + 1, CELL - 2, 4);
-        ctx.fillRect(px + 1, py + 1, 4, CELL - 2);
-        // Shadow
-        ctx.fillStyle = 'rgba(0,0,0,0.3)';
-        ctx.fillRect(px + 1, py + CELL - 5, CELL - 2, 4);
-        ctx.fillRect(px + CELL - 5, py + 1, 4, CELL - 2);
+    function shadeColor(hex, amt) {
+        const n = parseInt(hex.slice(1), 16);
+        const f = (v) => Math.max(0, Math.min(255, Math.round(amt < 0 ? v * (1 + amt) : v + (255 - v) * amt)));
+        return `rgb(${f((n >> 16) & 255)},${f((n >> 8) & 255)},${f(n & 255)})`;
+    }
+
+    // Beveled glossy block
+    function drawCell(c, px, py, size, color) {
+        const s = size;
+        c.fillStyle = shadeColor(color, -0.35);
+        c.fillRect(px + 1, py + 1, s - 2, s - 2);
+        const g = c.createLinearGradient(px, py, px + s, py + s);
+        g.addColorStop(0, shadeColor(color, 0.35));
+        g.addColorStop(0.5, color);
+        g.addColorStop(1, shadeColor(color, -0.2));
+        c.fillStyle = g;
+        const b = Math.max(2, Math.round(s * 0.13));
+        c.fillRect(px + 1 + b, py + 1 + b, s - 2 - b * 2, s - 2 - b * 2);
+        // bevels
+        c.fillStyle = shadeColor(color, 0.5);
+        c.beginPath(); c.moveTo(px + 1, py + 1); c.lineTo(px + s - 1, py + 1); c.lineTo(px + s - 1 - b, py + 1 + b); c.lineTo(px + 1 + b, py + 1 + b); c.closePath(); c.fill();
+        c.fillStyle = shadeColor(color, 0.2);
+        c.beginPath(); c.moveTo(px + 1, py + 1); c.lineTo(px + 1 + b, py + 1 + b); c.lineTo(px + 1 + b, py + s - 1 - b); c.lineTo(px + 1, py + s - 1); c.closePath(); c.fill();
+        c.fillStyle = shadeColor(color, -0.5);
+        c.beginPath(); c.moveTo(px + s - 1, py + s - 1); c.lineTo(px + 1, py + s - 1); c.lineTo(px + 1 + b, py + s - 1 - b); c.lineTo(px + s - 1 - b, py + s - 1 - b); c.closePath(); c.fill();
+        c.fillStyle = shadeColor(color, -0.35);
+        c.beginPath(); c.moveTo(px + s - 1, py + s - 1); c.lineTo(px + s - 1, py + 1); c.lineTo(px + s - 1 - b, py + 1 + b); c.lineTo(px + s - 1 - b, py + s - 1 - b); c.closePath(); c.fill();
+        // gloss
+        c.fillStyle = 'rgba(255,255,255,0.22)';
+        c.fillRect(px + 1 + b + 1, py + 1 + b + 1, Math.max(2, s * 0.22), Math.max(2, s * 0.12));
     }
 
     function renderHold() {
@@ -542,14 +643,7 @@
         const offX = (w - piecedW * cell) / 2 - minX * cell;
         const offY = offsetY + (h - piecedH * cell) / 2 - minY * cell;
         for (const ce of cells) {
-            const px = offX + ce.x * cell;
-            const py = offY + ce.y * cell;
-            c.fillStyle = def.color;
-            c.fillRect(px + 1, py + 1, cell - 2, cell - 2);
-            c.fillStyle = 'rgba(255,255,255,0.18)';
-            c.fillRect(px + 1, py + 1, cell - 2, 3);
-            c.fillStyle = 'rgba(0,0,0,0.3)';
-            c.fillRect(px + 1, py + cell - 4, cell - 2, 3);
+            drawCell(c, offX + ce.x * cell, offY + ce.y * cell, cell, def.color);
         }
     }
 
@@ -569,6 +663,9 @@
         state.dropTimer = 0;
         state.clearAnim = null;
         state.lastClearWasTetris = false;
+        state.particles = [];
+        state.trail = null;
+        state.combo = -1;
         ensureNext();
         spawnActive(state.next.shift());
         updateHud();
@@ -618,6 +715,7 @@
         else if (k === 'p' || k === 'P' || k === 'Escape') togglePause();
         else if (k === 'r' || k === 'R') restart();
     });
+    window.addEventListener('blur', () => { state.heldL = state.heldR = state.softDrop = false; });
     document.addEventListener('keyup', (e) => {
         const k = e.key;
         if (k === 'ArrowDown' || k === 's' || k === 'S') state.softDrop = false;
@@ -663,6 +761,7 @@
         if (!state.paused) last = performance.now();
     }
     function restart() {
+        ui.oTitle.classList.add('hidden');
         ui.oOver.classList.add('hidden');
         ui.oPause.classList.add('hidden');
         newGame();

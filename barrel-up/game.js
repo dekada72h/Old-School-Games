@@ -95,7 +95,11 @@
         deathT: 0,
         winT: 0,
         currentPlatformIdx: 0,
-        topReached: false
+        topReached: false,
+        hammer: null,
+        hammerT: 0,
+        particles: [],
+        throwT: 0
     };
 
     const KEY = 'osg.barrel-up.hs';
@@ -157,6 +161,10 @@
         state.spawnTimer = 1.5;
         state.currentPlatformIdx = 0;
         state.topReached = false;
+        state.hammer = { idx: 2, x: 300, taken: false };
+        state.hammerT = 0;
+        state.particles = [];
+        state.throwT = 0;
         ui.levelTitle.textContent = `LEVEL ${state.level}`;
         ui.levelTag.textContent = state.level === 1 ? 'Get climbing!' : 'More barrels. Watch out.';
         ui.oLevel.classList.remove('hidden');
@@ -178,22 +186,18 @@
         ui.level.textContent = state.level;
     }
 
-    function findPlatformAt(x, y) {
-        let best = -1;
-        for (let i = PLATFORMS.length - 1; i >= 0; i--) {
+    // Swept landing test: did something's "feet" cross a platform surface this frame?
+    // Only platforms with index < belowIdx are considered (idx 0 is the lowest girder).
+    function landing(x, prevFeet, feet, belowIdx) {
+        let best = null;
+        const lim = belowIdx === undefined ? PLATFORMS.length : belowIdx;
+        for (let i = 0; i < lim; i++) {
             const py = platformY(PLATFORMS[i], x);
-            if (y <= py + 4 && y >= py - 60) { best = i; break; }
+            if (prevFeet <= py + 3 && feet >= py - 0.01) {
+                if (!best || py < best.y) best = { y: py, idx: i };
+            }
         }
         return best;
-    }
-
-    function platformBelowY(x, y) {
-        // Returns the y of the closest platform below the player
-        for (let i = 0; i < PLATFORMS.length; i++) {
-            const py = platformY(PLATFORMS[i], x);
-            if (py >= y - 2) return { y: py, idx: i };
-        }
-        return null;
     }
 
     // ---------- Update ----------
@@ -218,89 +222,102 @@
 
         const p = state.player;
         const moveSp = 130;
-        const climbSp = 110;
+        const climbSp = 100;
         const gravity = 1100;
 
-        // Ladder check — is player on a ladder?
+        // Particles
+        for (let i = state.particles.length - 1; i >= 0; i--) {
+            const q = state.particles[i];
+            q.age += dt;
+            if (q.age >= q.life) { state.particles.splice(i, 1); continue; }
+            q.x += q.vx * dt; q.y += q.vy * dt; q.vy += 500 * dt;
+        }
+        if (state.throwT > 0) state.throwT -= dt;
+        if (state.hammerT > 0) state.hammerT -= dt;
+
+        // Ladder check — is player at a ladder?
         let nearLadder = null;
         for (const lad of state.ladders) {
-            if (Math.abs(p.x - lad.x) < 14 && p.y >= lad.yTop - 20 && p.y <= lad.yBot + 20) {
+            if (Math.abs(p.x - lad.x) < 12 && p.y >= lad.yTop - 20 && p.y <= lad.yBot + 20) {
                 nearLadder = lad;
                 break;
             }
         }
 
+        const prevFeet = p.y + 14;
         if (p.onLadder) {
-            // Climbing
-            if (state.keyU) p.y -= climbSp * dt;
-            if (state.keyD) p.y += climbSp * dt;
-            // Snap x to ladder
+            const dy = (state.keyD ? 1 : 0) - (state.keyU ? 1 : 0);
+            p.y += dy * climbSp * dt;
             p.x = p.ladder.x;
-            // Exit ladder at top/bottom
-            if (p.y <= p.ladder.yTop - 2) {
+            p.climbAnim = (p.climbAnim || 0) + Math.abs(dy) * dt * 8;
+            if (dy < 0 && p.y <= p.ladder.yTop - 14) {
                 p.onLadder = false;
                 p.y = p.ladder.yTop - 14;
-                // Score for reaching new platform
+                p.vy = 0;
                 const idx = p.ladder.upperIdx;
                 if (idx > state.currentPlatformIdx) {
                     state.score += 200;
                     state.currentPlatformIdx = idx;
                     blip(880, 0.1);
                 }
-            }
-            if (p.y >= p.ladder.yBot - 14) {
+            } else if (dy > 0 && p.y >= p.ladder.yBot - 14) {
                 p.onLadder = false;
                 p.y = p.ladder.yBot - 14;
-            }
-            if ((state.keyL || state.keyR) && p.y < p.ladder.yBot - 14 && p.y > p.ladder.yTop) {
-                // Ignore — must be at platform level to leave
+                p.vy = 0;
             }
         } else {
-            // On ground or in air
             if (state.keyL) { p.x -= moveSp * dt; p.facing = -1; }
             if (state.keyR) { p.x += moveSp * dt; p.facing = 1; }
 
-            // Get on ladder
-            if ((state.keyU || state.keyD) && nearLadder) {
-                if (state.keyU && p.y > nearLadder.yTop + 4) {
-                    p.onLadder = true;
-                    p.ladder = nearLadder;
-                    p.vy = 0;
-                    p.jumping = false;
+            // Grab a ladder (not while swinging the hammer)
+            if ((state.keyU || state.keyD) && nearLadder && p.onGround && state.hammerT <= 0) {
+                if (state.keyU && p.y > nearLadder.yTop - 12) {
+                    p.onLadder = true; p.ladder = nearLadder; p.vy = 0; p.jumping = false; p.x = nearLadder.x;
                 } else if (state.keyD && p.y < nearLadder.yBot - 16) {
-                    p.onLadder = true;
-                    p.ladder = nearLadder;
+                    p.onLadder = true; p.ladder = nearLadder; p.vy = 0; p.jumping = false; p.x = nearLadder.x;
+                }
+            }
+
+            if (!p.onLadder) {
+                // Jump
+                if (state.keyJump && p.onGround) {
+                    p.vy = -380;
+                    p.jumping = true;
+                    p.onGround = false;
+                    state.keyJump = false;
+                    blip(660, 0.1, 'square');
+                }
+                // Gravity + landing (swept)
+                p.vy += gravity * dt;
+                p.y += p.vy * dt;
+                const hit = landing(p.x, prevFeet, p.y + 14);
+                if (hit && p.vy >= 0) {
+                    p.y = hit.y - 14;
                     p.vy = 0;
+                    p.onGround = true;
                     p.jumping = false;
+                    if (hit.idx > state.currentPlatformIdx) {
+                        state.score += 200;
+                        state.currentPlatformIdx = hit.idx;
+                        blip(880, 0.1);
+                    }
+                } else {
+                    p.onGround = false;
+                    // safety net: never fall out of the world
+                    if (p.y > H + 40) { playerDie(); return; }
                 }
             }
+        }
 
-            // Gravity
-            p.vy += gravity * dt;
-            p.y += p.vy * dt;
-
-            // Land on platform
-            const next = platformBelowY(p.x, p.y - 14);
-            if (next && p.vy > 0 && p.y >= next.y - 14 - 1) {
-                p.y = next.y - 14;
-                p.vy = 0;
-                p.onGround = true;
-                p.jumping = false;
-                if (next.idx > state.currentPlatformIdx) {
-                    state.score += 200;
-                    state.currentPlatformIdx = next.idx;
-                    blip(880, 0.1);
-                }
-            } else {
-                p.onGround = false;
-            }
-
-            // Jump
-            if (state.keyJump && p.onGround && !p.jumping) {
-                p.vy = -380;
-                p.jumping = true;
-                state.keyJump = false;
-                blip(660, 0.1, 'square');
+        // Hammer pickup
+        if (state.hammer && !state.hammer.taken) {
+            const h = state.hammer;
+            const hy = platformY(PLATFORMS[h.idx], h.x) - 14;
+            if (Math.abs(p.x - h.x) < 18 && Math.abs(p.y - hy) < 22) {
+                h.taken = true;
+                state.hammerT = 8;
+                p.onLadder = false;
+                blip(523, 0.1, 'triangle'); blip(784, 0.12, 'triangle');
             }
         }
 
@@ -320,20 +337,20 @@
         // Spawn barrels
         state.spawnTimer -= dt;
         if (state.spawnTimer <= 0) {
-            state.spawnTimer = Math.max(1.2, 3.5 - state.level * 0.3);
-            // Barrel starts at top platform (idx = PLATFORMS.length - 2 to give one platform of margin)
-            const startP = PLATFORMS[PLATFORMS.length - 2];
-            const startX = 80;
+            state.spawnTimer = Math.max(1.3, 3.6 - state.level * 0.3);
+            const startIdx = PLATFORMS.length - 2;
+            const startX = 70;
             state.barrels.push({
                 x: startX,
-                y: platformY(startP, startX) - 12,
-                vx: 100 + state.level * 8,
+                y: platformY(PLATFORMS[startIdx], startX) - 12,
+                vx: 105 + state.level * 8,
                 vy: 0,
-                platformIdx: PLATFORMS.length - 2,
+                platformIdx: startIdx,
                 falling: false,
                 spin: 0,
                 id: Math.random()
             });
+            state.throwT = 0.5;
             blip(220, 0.1, 'sawtooth');
         }
 
@@ -341,67 +358,71 @@
         for (let i = state.barrels.length - 1; i >= 0; i--) {
             const b = state.barrels[i];
             const platform = PLATFORMS[b.platformIdx];
+            const prevBottom = b.y + 12;
             if (!b.falling) {
-                // Roll along platform
+                // Always roll downhill (flat girders keep their heading)
+                const slope = platform.slope;
+                const speed = Math.abs(b.vx);
+                if (slope > 0) b.vx = speed; else if (slope < 0) b.vx = -speed;
                 b.x += b.vx * dt;
                 b.y = platformY(platform, b.x) - 12;
-                b.spin += b.vx * dt * 0.04;
-                // Reverse direction at boundary platform's slope-end (rolls toward downhill side)
-                const slope = platform.slope;
-                if (Math.sign(b.vx) !== Math.sign(slope) && slope !== 0) {
-                    b.vx = -b.vx;
-                }
-                // Off platform edge → fall
-                if (b.x < 10 || b.x > W - 10) {
+                b.spin += b.vx * dt * 0.08;
+                // Off the end of the girder → fall to the next one down
+                if (b.x < 12 || b.x > W - 12) {
                     b.falling = true;
-                    b.x = Math.max(15, Math.min(W - 15, b.x));
+                    b.x = Math.max(12, Math.min(W - 12, b.x));
+                    b.vy = 40;
                 }
-                // Fall down ladder occasionally (random)
-                for (const lad of state.ladders) {
-                    if (lad.lowerIdx === b.platformIdx - 1 && Math.abs(b.x - lad.x) < 12 && Math.random() < 0.02) {
-                        b.falling = true;
-                        b.targetIdx = b.platformIdx - 1;
-                        break;
+                // Occasionally dive down a ladder
+                if (!b.falling) {
+                    for (const lad of state.ladders) {
+                        if (lad.upperIdx === b.platformIdx && Math.abs(b.x - lad.x) < 6 && Math.random() < 0.04) {
+                            b.falling = true; b.vy = 40; b.x = lad.x;
+                            break;
+                        }
                     }
                 }
             } else {
                 b.vy += 800 * dt;
                 b.y += b.vy * dt;
                 b.spin += dt * 8;
-                // Land on a platform below?
-                const next = platformBelowY(b.x, b.y - 12);
-                if (next && b.vy > 0 && b.y >= next.y - 12 - 1) {
-                    b.y = next.y - 12;
+                const hit = landing(b.x, b.y - b.vy * dt + 12 - 0, b.y + 12, b.platformIdx);
+                if (hit) {
+                    b.y = hit.y - 12;
                     b.vy = 0;
-                    b.platformIdx = next.idx;
+                    b.platformIdx = hit.idx;
                     b.falling = false;
-                    // Direction follows the slope's downhill side; on flat platforms keep heading
-                    // away from the wall the barrel just bounced off (or rightward by default).
-                    const slope = PLATFORMS[next.idx].slope;
-                    const speed = Math.abs(b.vx) || (100 + state.level * 8);
-                    if (slope > 0) b.vx = -speed;
-                    else if (slope < 0) b.vx = speed;
+                    const sl = PLATFORMS[hit.idx].slope;
+                    const speed = Math.abs(b.vx) || (105 + state.level * 8);
+                    if (sl > 0) b.vx = speed;
+                    else if (sl < 0) b.vx = -speed;
                     else b.vx = b.x < W / 2 ? speed : -speed;
                 }
-                if (b.y > H + 30) state.barrels.splice(i, 1);
+                if (b.y > H + 30) { state.barrels.splice(i, 1); continue; }
             }
-            // Collision with player
+
+            // Collision with the player
             if (state.deathT === 0 && state.winT === 0) {
-                if (Math.hypot(b.x - p.x, b.y - p.y + 8) < 16) {
-                    // Mid-air pass-over: barrel below player AND player's feet are above barrel
-                    // top by a margin. Works for both ascending and descending arcs.
-                    const passingOver = p.jumping && (b.y - p.y) >= 6;
-                    if (!passingOver) {
-                        playerDie();
-                        return;
+                const dx = b.x - p.x, dy = b.y - (p.y + 4);
+                if (Math.hypot(dx, dy) < 18) {
+                    if (state.hammerT > 0) {
+                        // Smash!
+                        state.score += 300;
+                        for (let q = 0; q < 16; q++) state.particles.push({ x: b.x, y: b.y, vx: (Math.random() - 0.5) * 300, vy: (Math.random() - 0.9) * 300, age: 0, life: 0.6, color: q % 2 ? COLORS.barrel : '#ffd06b' });
+                        state.barrels.splice(i, 1);
+                        blip(180, 0.1, 'square'); blip(900, 0.08, 'triangle');
+                        continue;
                     }
+                    // Mid-air pass-over
+                    const passingOver = p.jumping && (b.y - p.y) >= 8;
+                    if (!passingOver) { playerDie(); return; }
                 }
-                // Score for jumping over a barrel: when player y is above barrel y while in jump
+                // Jump-over bonus
                 if (p.jumping && Math.abs(b.x - p.x) < 14 && b.y - p.y > 8 && !p.jumpedBarrels.has(b.id)) {
                     p.jumpedBarrels.add(b.id);
                     state.score += 100;
+                    state.particles.push({ x: p.x, y: p.y - 20, vx: 0, vy: -40, age: 0, life: 0.7, color: '#5fffd8', text: '100' });
                     blip(1320, 0.08);
-                    updateHud();
                 }
             }
         }
@@ -428,136 +449,137 @@
             state.barrels = [];
             state.spawnTimer = 1.5;
             state.currentPlatformIdx = 0;
+            state.hammerT = 0;
+            if (state.hammer) state.hammer.taken = false;
         }
         updateHud();
     }
 
     // ---------- Render ----------
-    function render() {
-        ctx.fillStyle = COLORS.bg;
-        ctx.fillRect(0, 0, W, H);
-
-        // Stars (very faint)
-        ctx.fillStyle = 'rgba(255,255,255,0.15)';
-        for (let i = 0; i < 30; i++) {
-            const x = (i * 73) % W;
-            const y = (i * 41) % H;
-            ctx.fillRect(x, y, 1, 1);
+    let bgCanvas = null;
+    function buildBg() {
+        const c = document.createElement('canvas');
+        c.width = W; c.height = H;
+        const g = c.getContext('2d');
+        const grad = g.createLinearGradient(0, 0, 0, H);
+        grad.addColorStop(0, '#0c0620'); grad.addColorStop(1, '#1a0a1c');
+        g.fillStyle = grad; g.fillRect(0, 0, W, H);
+        // skyline silhouettes
+        g.fillStyle = 'rgba(70,30,80,0.35)';
+        for (let i = 0; i < 14; i++) {
+            const bw = 30 + (i * 37) % 40, bh = 80 + (i * 61) % 180;
+            g.fillRect(i * 42, H - bh, bw, bh);
         }
+        g.fillStyle = 'rgba(255,208,107,0.18)';
+        for (let i = 0; i < 90; i++) g.fillRect((i * 53) % W, H - 20 - ((i * 97) % 240), 2, 3);
+        return c;
+    }
+
+    function render() {
+        if (!bgCanvas) bgCanvas = buildBg();
+        ctx.drawImage(bgCanvas, 0, 0);
 
         // Ladders
         for (const lad of state.ladders) {
-            ctx.strokeStyle = COLORS.ladderRail;
-            ctx.lineWidth = 3;
+            const g = ctx.createLinearGradient(lad.x - 9, 0, lad.x + 9, 0);
+            g.addColorStop(0, '#6b4400'); g.addColorStop(0.5, '#ffd06b'); g.addColorStop(1, '#6b4400');
+            ctx.strokeStyle = g;
+            ctx.lineWidth = 4;
             ctx.beginPath();
-            ctx.moveTo(lad.x - 8, lad.yTop);
-            ctx.lineTo(lad.x - 8, lad.yBot);
-            ctx.moveTo(lad.x + 8, lad.yTop);
-            ctx.lineTo(lad.x + 8, lad.yBot);
+            ctx.moveTo(lad.x - 8, lad.yTop); ctx.lineTo(lad.x - 8, lad.yBot);
+            ctx.moveTo(lad.x + 8, lad.yTop); ctx.lineTo(lad.x + 8, lad.yBot);
             ctx.stroke();
-            // Rungs
             ctx.fillStyle = COLORS.ladder;
-            for (let y = lad.yTop + 6; y < lad.yBot; y += 12) {
-                ctx.fillRect(lad.x - 10, y, 20, 3);
-            }
+            for (let y = lad.yTop + 8; y < lad.yBot - 2; y += 12) ctx.fillRect(lad.x - 9, y, 18, 3);
         }
 
-        // Platforms
-        for (const p of PLATFORMS) {
-            ctx.fillStyle = COLORS.girder;
-            const y1 = platformY(p, 0);
-            const y2 = platformY(p, W);
+        // Platforms (steel girders)
+        PLATFORMS.forEach((p, idx) => {
+            const y1 = platformY(p, 0), y2 = platformY(p, W);
+            const g = ctx.createLinearGradient(0, Math.min(y1, y2), 0, Math.max(y1, y2) + 14);
+            g.addColorStop(0, '#ff9a5a'); g.addColorStop(0.5, COLORS.girder); g.addColorStop(1, COLORS.girderDark);
+            ctx.fillStyle = g;
             ctx.beginPath();
-            ctx.moveTo(0, y1);
-            ctx.lineTo(W, y2);
-            ctx.lineTo(W, y2 + 10);
-            ctx.lineTo(0, y1 + 10);
-            ctx.closePath();
-            ctx.fill();
-            ctx.fillStyle = COLORS.girderDark;
-            // Rivets
-            for (let x = 20; x < W; x += 40) {
-                const yy = platformY(p, x);
-                ctx.fillRect(x - 1, yy + 4, 2, 2);
+            ctx.moveTo(0, y1); ctx.lineTo(W, y2); ctx.lineTo(W, y2 + 14); ctx.lineTo(0, y1 + 14);
+            ctx.closePath(); ctx.fill();
+            ctx.fillStyle = 'rgba(255,255,255,0.28)';
+            ctx.beginPath(); ctx.moveTo(0, y1); ctx.lineTo(W, y2); ctx.lineTo(W, y2 + 2); ctx.lineTo(0, y1 + 2); ctx.fill();
+            // truss
+            ctx.strokeStyle = 'rgba(90,30,0,0.55)'; ctx.lineWidth = 1.5;
+            ctx.beginPath();
+            for (let x = 0; x < W; x += 28) {
+                const ya = platformY(p, x) + 2, yb = platformY(p, x + 14) + 12, yc = platformY(p, x + 28) + 2;
+                ctx.moveTo(x, ya); ctx.lineTo(x + 14, yb); ctx.lineTo(x + 28, yc);
             }
-        }
+            ctx.stroke();
+            ctx.fillStyle = '#ffe2b8';
+            for (let x = 14; x < W; x += 28) ctx.fillRect(x - 1, platformY(p, x) + 1, 2, 2);
+        });
 
-        // Boss ape (decorative top-left)
-        const apeY = platformY(PLATFORMS[PLATFORMS.length - 1], 80);
-        ctx.fillStyle = COLORS.ape;
-        ctx.beginPath();
-        ctx.arc(80, apeY - 30, 22, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.fillStyle = COLORS.apeDark;
-        ctx.beginPath();
-        ctx.arc(80, apeY - 26, 18, 0, Math.PI);
-        ctx.fill();
-        // Eyes
-        ctx.fillStyle = '#fff';
-        ctx.fillRect(72, apeY - 36, 3, 4);
-        ctx.fillRect(85, apeY - 36, 3, 4);
-        ctx.fillStyle = '#ff2e63';
-        ctx.fillRect(73, apeY - 35, 1.5, 2);
-        ctx.fillRect(86, apeY - 35, 1.5, 2);
+        // Boss ape
+        drawApe(80, platformY(PLATFORMS[PLATFORMS.length - 1], 80));
 
-        // Princess (decorative top-right area)
-        const princessX = W - 100;
-        const princessY = platformY(PLATFORMS[PLATFORMS.length - 1], princessX);
-        ctx.fillStyle = COLORS.princess;
-        ctx.fillRect(princessX - 8, princessY - 22, 16, 22);
-        ctx.fillStyle = '#fff';
-        ctx.fillRect(princessX - 5, princessY - 28, 10, 8);
-        ctx.fillStyle = COLORS.princessHair;
-        ctx.fillRect(princessX - 7, princessY - 30, 14, 5);
-        ctx.fillStyle = '#ff66cc';
-        // Help! text bubble
-        if (Math.floor(state.animTime * 2) % 2 === 0) {
-            ctx.fillStyle = '#fff';
-            ctx.font = "bold 10px 'Press Start 2P', monospace";
-            ctx.textAlign = 'center';
-            ctx.fillText('HELP!', princessX, princessY - 40);
+        // Princess
+        drawPrincess(W - 100, platformY(PLATFORMS[PLATFORMS.length - 1], W - 100));
+
+        // Hammer pickup
+        if (state.hammer && !state.hammer.taken) {
+            const h = state.hammer;
+            const hy = platformY(PLATFORMS[h.idx], h.x);
+            const bob = Math.sin(state.animTime * 4) * 2;
+            ctx.save();
+            ctx.translate(h.x, hy - 14 + bob);
+            ctx.shadowColor = '#ffd06b'; ctx.shadowBlur = 12;
+            ctx.fillStyle = '#a36b2e'; ctx.fillRect(-2, -2, 4, 16);
+            ctx.fillStyle = '#c0c4d0'; ctx.fillRect(-9, -10, 18, 10);
+            ctx.restore();
         }
 
         // Barrels
         for (const b of state.barrels) {
             ctx.save();
             ctx.translate(b.x, b.y);
+            ctx.fillStyle = 'rgba(0,0,0,0.3)';
+            ctx.beginPath(); ctx.ellipse(2, 12, 11, 3, 0, 0, Math.PI * 2); ctx.fill();
             ctx.rotate(b.spin);
-            ctx.fillStyle = COLORS.barrel;
-            ctx.fillRect(-12, -10, 24, 20);
-            ctx.fillStyle = COLORS.barrelBand;
-            ctx.fillRect(-12, -8, 24, 2);
-            ctx.fillRect(-12, 0, 24, 2);
-            ctx.fillRect(-12, 6, 24, 2);
+            const g = ctx.createRadialGradient(-3, -3, 2, 0, 0, 13);
+            g.addColorStop(0, '#e89a52'); g.addColorStop(1, '#8a4a18');
+            ctx.fillStyle = g;
+            ctx.beginPath(); ctx.arc(0, 0, 12, 0, Math.PI * 2); ctx.fill();
+            ctx.strokeStyle = COLORS.barrelBand; ctx.lineWidth = 2;
+            ctx.beginPath(); ctx.arc(0, 0, 9, 0, Math.PI * 2); ctx.stroke();
+            ctx.beginPath(); ctx.moveTo(-12, 0); ctx.lineTo(12, 0); ctx.moveTo(0, -12); ctx.lineTo(0, 12); ctx.stroke();
+            ctx.fillStyle = '#3a2410'; ctx.beginPath(); ctx.arc(0, 0, 2.5, 0, 7); ctx.fill();
             ctx.restore();
         }
 
         // Player
-        if (state.deathT === 0) {
-            const p = state.player;
-            // Body
-            ctx.fillStyle = COLORS.player;
-            ctx.fillRect(p.x - 8, p.y - 4, 16, 14);
-            // Head
-            ctx.fillStyle = '#ffd6b3';
-            ctx.fillRect(p.x - 6, p.y - 14, 12, 10);
-            // Cap
-            ctx.fillStyle = COLORS.playerCap;
-            ctx.fillRect(p.x - 7, p.y - 16, 14, 4);
-            ctx.fillRect(p.x - 7 + (p.facing > 0 ? 4 : -4), p.y - 14, 6, 2);
-            // Legs
-            ctx.fillStyle = '#5fd0ff';
-            const legSwing = state.keyL || state.keyR ? Math.sin(state.animTime * 12) * 2 : 0;
-            ctx.fillRect(p.x - 7, p.y + 10, 4, 6 + legSwing);
-            ctx.fillRect(p.x + 3, p.y + 10, 4, 6 - legSwing);
-        } else {
-            // Death stars
-            for (let i = 0; i < 5; i++) {
+        if (state.deathT === 0) drawPlayer(state.player);
+        else {
+            const pl = state.player;
+            for (let i = 0; i < 6; i++) {
                 ctx.fillStyle = i % 2 ? COLORS.player : COLORS.playerCap;
-                const ang = (i / 5) * Math.PI * 2 + state.animTime * 6;
-                const r = 18;
-                ctx.fillRect(state.player.x + Math.cos(ang) * r, state.player.y + Math.sin(ang) * r, 4, 4);
+                const ang = (i / 6) * Math.PI * 2 + state.animTime * 6;
+                ctx.fillRect(pl.x + Math.cos(ang) * 20, pl.y + Math.sin(ang) * 20, 5, 5);
             }
+        }
+
+        // Particles
+        for (const q of state.particles) {
+            ctx.globalAlpha = 1 - q.age / q.life;
+            if (q.text) {
+                ctx.fillStyle = q.color; ctx.font = "bold 10px 'Press Start 2P', monospace"; ctx.textAlign = 'center';
+                ctx.fillText(q.text, q.x, q.y);
+            } else {
+                ctx.fillStyle = q.color; ctx.fillRect(q.x - 2, q.y - 2, 4, 4);
+            }
+        }
+        ctx.globalAlpha = 1;
+
+        // Hammer timer
+        if (state.hammerT > 0) {
+            ctx.fillStyle = 'rgba(0,0,0,0.45)'; ctx.fillRect(W / 2 - 50, 10, 100, 8);
+            ctx.fillStyle = '#ffd06b'; ctx.fillRect(W / 2 - 50, 10, 100 * state.hammerT / 8, 8);
         }
 
         // Lives icons
@@ -565,8 +587,112 @@
             ctx.fillStyle = COLORS.player;
             ctx.fillRect(20 + i * 20, H - 18, 8, 12);
             ctx.fillStyle = COLORS.playerCap;
-            ctx.fillRect(20 + i * 20 - 1, H - 22, 10, 3);
+            ctx.fillRect(20 + i * 20 - 1, H - 22, 10, 4);
         }
+    }
+
+    function drawApe(x, baseY) {
+        const throwing = state.throwT > 0;
+        const bob = Math.sin(state.animTime * 3) * 1.5;
+        ctx.save();
+        ctx.translate(x, baseY);
+        ctx.fillStyle = 'rgba(0,0,0,0.3)';
+        ctx.beginPath(); ctx.ellipse(0, 1, 34, 6, 0, 0, Math.PI * 2); ctx.fill();
+        // body
+        const g = ctx.createRadialGradient(-6, -34 + bob, 4, 0, -28 + bob, 34);
+        g.addColorStop(0, '#b891ff'); g.addColorStop(1, COLORS.apeDark);
+        ctx.fillStyle = g;
+        ctx.beginPath(); ctx.ellipse(0, -26 + bob, 30, 26, 0, 0, Math.PI * 2); ctx.fill();
+        // chest
+        ctx.fillStyle = '#d9c0a0';
+        ctx.beginPath(); ctx.ellipse(0, -22 + bob, 16, 16, 0, 0, Math.PI * 2); ctx.fill();
+        // arms
+        ctx.strokeStyle = COLORS.apeDark; ctx.lineWidth = 12; ctx.lineCap = 'round';
+        ctx.beginPath();
+        ctx.moveTo(-24, -34 + bob); ctx.lineTo(-34, -12 + bob);
+        ctx.moveTo(24, -34 + bob); ctx.lineTo(throwing ? 44 : 34, throwing ? -44 + bob : -12 + bob);
+        ctx.stroke();
+        ctx.lineCap = 'butt';
+        // head
+        ctx.fillStyle = COLORS.ape;
+        ctx.beginPath(); ctx.arc(0, -56 + bob, 18, 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = '#e8cfae';
+        ctx.beginPath(); ctx.ellipse(0, -52 + bob, 11, 9, 0, 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = '#fff';
+        ctx.fillRect(-9, -64 + bob, 7, 6); ctx.fillRect(2, -64 + bob, 7, 6);
+        ctx.fillStyle = '#ff2e63';
+        ctx.fillRect(-6, -62 + bob, 3, 3); ctx.fillRect(4, -62 + bob, 3, 3);
+        ctx.strokeStyle = '#2a1050'; ctx.lineWidth = 2.5;
+        ctx.beginPath(); ctx.moveTo(-11, -68 + bob); ctx.lineTo(-2, -64 + bob); ctx.moveTo(11, -68 + bob); ctx.lineTo(2, -64 + bob); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(-5, -48 + bob); ctx.lineTo(5, -48 + bob); ctx.stroke();
+        ctx.restore();
+    }
+
+    function drawPrincess(x, baseY) {
+        const sway = Math.sin(state.animTime * 3) * 1.5;
+        ctx.save();
+        ctx.translate(x, baseY);
+        ctx.fillStyle = COLORS.princess;
+        ctx.beginPath(); ctx.moveTo(-5, -22); ctx.lineTo(5, -22); ctx.lineTo(12 + sway, 0); ctx.lineTo(-12 + sway, 0); ctx.closePath(); ctx.fill();
+        ctx.fillStyle = '#ffd6b3'; ctx.beginPath(); ctx.arc(0, -28, 6, 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = COLORS.princessHair;
+        ctx.beginPath(); ctx.arc(0, -31, 7, Math.PI, 0); ctx.fill();
+        ctx.fillRect(-7, -31, 3, 12); ctx.fillRect(4, -31, 3, 12);
+        if (Math.floor(state.animTime * 2) % 2 === 0) {
+            ctx.fillStyle = '#fff';
+            ctx.font = "bold 10px 'Press Start 2P', monospace";
+            ctx.textAlign = 'center';
+            ctx.fillText('HELP!', 0, -46);
+        }
+        ctx.restore();
+    }
+
+    function drawPlayer(p) {
+        const walking = (state.keyL || state.keyR) && p.onGround && !p.onLadder;
+        const swing = walking ? Math.sin(state.animTime * 14) * 3 : 0;
+        ctx.save();
+        ctx.translate(p.x, p.y);
+        ctx.fillStyle = 'rgba(0,0,0,0.25)';
+        ctx.beginPath(); ctx.ellipse(0, 14, 9, 2.5, 0, 0, Math.PI * 2); ctx.fill();
+        if (p.onLadder) {
+            const sw = Math.sin((p.climbAnim || 0)) * 3;
+            ctx.fillStyle = '#2a6fd0'; ctx.fillRect(-7, -4, 14, 14);
+            ctx.fillStyle = '#ffd6b3'; ctx.fillRect(-9, -8 + sw, 4, 5); ctx.fillRect(5, -8 - sw, 4, 5);
+            ctx.fillStyle = '#ffd6b3'; ctx.fillRect(-6, -14, 12, 10);
+            ctx.fillStyle = COLORS.playerCap; ctx.fillRect(-7, -17, 14, 5);
+            ctx.fillStyle = '#4a2a10'; ctx.fillRect(-6, 10, 5, 5 + sw); ctx.fillRect(1, 10, 5, 5 - sw);
+        } else {
+            ctx.scale(p.facing, 1);
+            // legs
+            ctx.fillStyle = '#2a4fb0';
+            ctx.fillRect(-7, 8, 5, 6 + swing * 0.5); ctx.fillRect(2, 8, 5, 6 - swing * 0.5);
+            ctx.fillStyle = '#4a2a10';
+            ctx.fillRect(-8, 13 + swing * 0.5, 7, 3); ctx.fillRect(2, 13 - swing * 0.5, 7, 3);
+            // torso
+            ctx.fillStyle = COLORS.playerCap; ctx.fillRect(-8, -4, 16, 8);
+            ctx.fillStyle = '#2a6fd0'; ctx.fillRect(-7, 0, 14, 10);
+            ctx.fillStyle = '#ffd06b'; ctx.fillRect(-4, 2, 2, 2); ctx.fillRect(2, 2, 2, 2);
+            // head
+            ctx.fillStyle = '#ffd6b3'; ctx.fillRect(-6, -14, 12, 11);
+            ctx.fillStyle = '#3a2410'; ctx.fillRect(-6, -8, 12, 2);
+            ctx.fillStyle = '#0a0617'; ctx.fillRect(2, -11, 2, 3);
+            // cap
+            ctx.fillStyle = COLORS.playerCap; ctx.fillRect(-7, -17, 14, 5); ctx.fillRect(1, -14, 9, 2);
+            // arms / hammer
+            if (state.hammerT > 0) {
+                const sw = Math.sin(state.animTime * 16);
+                ctx.fillStyle = '#ffd6b3'; ctx.fillRect(5, -6, 5, 4);
+                ctx.save(); ctx.translate(8, -4); ctx.rotate(-0.9 + sw * 0.9);
+                ctx.fillStyle = '#a36b2e'; ctx.fillRect(-2, -20, 4, 22);
+                ctx.fillStyle = '#c0c4d0'; ctx.fillRect(-9, -28, 18, 10);
+                ctx.restore();
+            } else if (!p.onGround) {
+                ctx.fillStyle = '#ffd6b3'; ctx.fillRect(5, -12, 4, 6);
+            } else {
+                ctx.fillStyle = '#ffd6b3'; ctx.fillRect(5, -2 - swing * 0.3, 4, 5);
+            }
+        }
+        ctx.restore();
     }
 
     let last = performance.now();
@@ -574,6 +700,7 @@
         const dt = Math.min(0.05, (now - last) / 1000);
         last = now;
         if (state.running && !state.paused && !state.gameover) step(dt);
+        else state.animTime += dt;
         render();
         requestAnimationFrame(loop);
     }
@@ -638,6 +765,7 @@
         if (!state.paused) last = performance.now();
     }
     function restart() {
+        ui.oTitle.classList.add('hidden');
         ui.oOver.classList.add('hidden');
         ui.oPause.classList.add('hidden');
         ui.oLevel.classList.add('hidden');

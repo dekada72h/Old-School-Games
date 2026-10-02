@@ -42,7 +42,7 @@
         stars: [],
         nextLifeAt: 10000,
         saucerTimer: 18,
-        keyL: false, keyR: false, keyT: false, keyHS: false,
+        keyL: false, keyR: false, keyT: false, keyHS: false, keyFire: false,
         animTime: 0,
         respawnSafeT: 0
     };
@@ -224,42 +224,45 @@
             if (state.respawnSafeT > 0) state.respawnSafeT -= dt;
         }
 
+        // Auto-fire while the key is held
+        if (state.keyFire) fire();
+
         // Bullets
         for (let i = state.bullets.length - 1; i >= 0; i--) {
             const b = state.bullets[i];
-            b.x += b.vx * dt;
-            b.y += b.vy * dt;
             b.life -= dt;
-            // Bullets fly off the screen rather than wrapping — wrap was hitting asteroids
-            // on the far side of the playfield.
-            if (b.life <= 0 || b.x < -10 || b.x > W + 10 || b.y < -10 || b.y > H + 10) {
+            let removed = false;
+            // Sub-step so fast bullets can't skip over small rocks
+            const steps = Math.max(1, Math.ceil(Math.hypot(b.vx, b.vy) * dt / 8));
+            for (let st = 0; st < steps && !removed; st++) {
+                b.x += b.vx * dt / steps;
+                b.y += b.vy * dt / steps;
+                if (b.fromSaucer) break;
+                for (let j = state.rocks.length - 1; j >= 0; j--) {
+                    const r = state.rocks[j];
+                    if (Math.hypot(b.x - r.x, b.y - r.y) < r.radius) {
+                        breakRock(j);
+                        removed = true;
+                        break;
+                    }
+                }
+                if (removed) break;
+                for (let j = state.saucers.length - 1; j >= 0; j--) {
+                    const s = state.saucers[j];
+                    if (Math.hypot(b.x - s.x, b.y - s.y) < s.radius + 3) {
+                        state.score += s.big ? 200 : 1000;
+                        spawnExplosion(s.x, s.y, COLORS.saucer, 30);
+                        state.saucers.splice(j, 1);
+                        blip(220, 0.2, 'sawtooth');
+                        bump();
+                        removed = true;
+                        break;
+                    }
+                }
+            }
+            // Bullets fly off the screen rather than wrapping.
+            if (removed || b.life <= 0 || b.x < -10 || b.x > W + 10 || b.y < -10 || b.y > H + 10) {
                 state.bullets.splice(i, 1);
-                continue;
-            }
-            // Hit rocks
-            let hit = false;
-            for (let j = state.rocks.length - 1; j >= 0; j--) {
-                const r = state.rocks[j];
-                if (Math.hypot(b.x - r.x, b.y - r.y) < r.radius) {
-                    breakRock(j);
-                    state.bullets.splice(i, 1);
-                    hit = true;
-                    break;
-                }
-            }
-            if (hit) continue;
-            // Hit saucer
-            for (let j = state.saucers.length - 1; j >= 0; j--) {
-                const s = state.saucers[j];
-                if (Math.hypot(b.x - s.x, b.y - s.y) < s.radius) {
-                    state.score += s.big ? 200 : 1000;
-                    spawnExplosion(s.x, s.y, COLORS.saucer, 30);
-                    state.saucers.splice(j, 1);
-                    state.bullets.splice(i, 1);
-                    blip(220, 0.2, 'sawtooth');
-                    bump();
-                    break;
-                }
             }
         }
 
@@ -405,13 +408,17 @@
         } else {
             const runId = state.runId;
             if (state._respawnTimer) clearTimeout(state._respawnTimer);
-            state._respawnTimer = setTimeout(() => {
+            const tryRespawn = () => {
                 state._respawnTimer = null;
                 if (state.runId !== runId) return;
+                const blocked = state.rocks.some(r => Math.hypot(r.x - W / 2, r.y - H / 2) < r.radius + 70) ||
+                                state.saucers.some(sc => Math.hypot(sc.x - W / 2, sc.y - H / 2) < 90);
+                if (blocked) { state._respawnTimer = setTimeout(tryRespawn, 300); return; }
                 state.ship = makeShip();
                 state.respawnSafeT = 2;
                 updateHud();
-            }, 1200);
+            };
+            state._respawnTimer = setTimeout(tryRespawn, 1200);
         }
         updateHud();
     }
@@ -449,8 +456,16 @@
     }
 
     // ---------- Render ----------
+    let bgGrad = null;
+    const ROCK_COL = { 3: '#c9b8ff', 2: '#9fd8ff', 1: '#ffd0f0' };
+
     function render() {
-        ctx.fillStyle = COLORS.bg;
+        if (!bgGrad) {
+            bgGrad = ctx.createRadialGradient(W / 2, H / 2, 40, W / 2, H / 2, Math.max(W, H) * 0.75);
+            bgGrad.addColorStop(0, '#0e0a26');
+            bgGrad.addColorStop(1, '#030108');
+        }
+        ctx.fillStyle = bgGrad;
         ctx.fillRect(0, 0, W, H);
 
         // Stars
@@ -459,10 +474,11 @@
             ctx.fillRect(s.x, s.y, 1 + Math.floor(s.z * 1.5), 1 + Math.floor(s.z * 1.5));
         }
 
-        // Rocks (vector outlines)
-        ctx.strokeStyle = COLORS.rock;
-        ctx.lineWidth = 1.8;
+        // Rocks (glowing vector outlines with faint fill)
+        ctx.lineWidth = 2;
+        ctx.lineJoin = 'round';
         for (const r of state.rocks) {
+            const col = ROCK_COL[r.size] || '#ccc';
             ctx.save();
             ctx.translate(r.x, r.y);
             ctx.rotate(r.angle);
@@ -474,16 +490,22 @@
                 if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
             }
             ctx.closePath();
+            ctx.fillStyle = 'rgba(155,107,255,0.07)';
+            ctx.fill();
+            ctx.shadowColor = col; ctx.shadowBlur = 10;
+            ctx.strokeStyle = col;
             ctx.stroke();
             ctx.restore();
         }
+        ctx.shadowBlur = 0;
 
         // Saucers
         for (const s of state.saucers) {
-            ctx.strokeStyle = COLORS.saucer;
-            ctx.lineWidth = 1.5;
-            ctx.beginPath();
             const r = s.radius;
+            ctx.shadowColor = COLORS.saucer; ctx.shadowBlur = 12;
+            ctx.strokeStyle = COLORS.saucer;
+            ctx.lineWidth = 1.8;
+            ctx.beginPath();
             ctx.moveTo(s.x - r, s.y);
             ctx.lineTo(s.x - r * 0.5, s.y - r * 0.4);
             ctx.lineTo(s.x + r * 0.5, s.y - r * 0.4);
@@ -493,16 +515,21 @@
             ctx.closePath();
             ctx.stroke();
             ctx.beginPath();
-            ctx.moveTo(s.x - r, s.y);
-            ctx.lineTo(s.x + r, s.y);
+            ctx.moveTo(s.x - r, s.y); ctx.lineTo(s.x + r, s.y);
+            ctx.moveTo(s.x - r * 0.4, s.y - r * 0.4);
+            ctx.arc(s.x, s.y - r * 0.4, r * 0.4, Math.PI, 0);
             ctx.stroke();
         }
+        ctx.shadowBlur = 0;
 
         // Bullets
         for (const b of state.bullets) {
-            ctx.fillStyle = b.fromSaucer ? COLORS.saucer : COLORS.bullet;
-            ctx.fillRect(b.x - 1.5, b.y - 1.5, 3, 3);
+            const c = b.fromSaucer ? COLORS.saucer : COLORS.bullet;
+            ctx.shadowColor = c; ctx.shadowBlur = 10;
+            ctx.fillStyle = c;
+            ctx.beginPath(); ctx.arc(b.x, b.y, 2.2, 0, Math.PI * 2); ctx.fill();
         }
+        ctx.shadowBlur = 0;
 
         // Ship
         if (state.ship && state.ship.alive) {
@@ -512,23 +539,26 @@
                 ctx.save();
                 ctx.translate(sp.x, sp.y);
                 ctx.rotate(sp.angle);
-                ctx.strokeStyle = COLORS.ship;
+                if (sp.thrusting) {
+                    const fl = 10 + Math.random() * 8;
+                    const fg = ctx.createLinearGradient(-6, 0, -6 - fl, 0);
+                    fg.addColorStop(0, 'rgba(255,230,140,0.95)');
+                    fg.addColorStop(1, 'rgba(255,60,90,0)');
+                    ctx.fillStyle = fg;
+                    ctx.beginPath(); ctx.moveTo(-6, -4); ctx.lineTo(-6 - fl, 0); ctx.lineTo(-6, 4); ctx.fill();
+                }
+                ctx.shadowColor = COLORS.ship; ctx.shadowBlur = 14;
+                ctx.strokeStyle = '#c9a8ff';
+                ctx.fillStyle = 'rgba(155,107,255,0.18)';
                 ctx.lineWidth = 2;
                 ctx.beginPath();
-                ctx.moveTo(14, 0);
-                ctx.lineTo(-10, -8);
-                ctx.lineTo(-6, 0);
-                ctx.lineTo(-10, 8);
+                ctx.moveTo(15, 0);
+                ctx.lineTo(-10, -9);
+                ctx.lineTo(-5, 0);
+                ctx.lineTo(-10, 9);
                 ctx.closePath();
+                ctx.fill();
                 ctx.stroke();
-                if (sp.thrusting && Math.random() < 0.5) {
-                    ctx.strokeStyle = COLORS.thrust;
-                    ctx.beginPath();
-                    ctx.moveTo(-6, -3);
-                    ctx.lineTo(-12, 0);
-                    ctx.lineTo(-6, 3);
-                    ctx.stroke();
-                }
                 ctx.restore();
             }
         }
@@ -541,12 +571,13 @@
         }
         ctx.globalAlpha = 1;
 
-        // Lives icons (top-left under HUD area would be canvas top)
+        // Lives icons
         for (let i = 0; i < state.lives - 1; i++) {
             ctx.save();
             ctx.translate(20 + i * 22, 22);
             ctx.rotate(-Math.PI / 2);
-            ctx.strokeStyle = COLORS.ship;
+            ctx.shadowColor = COLORS.ship; ctx.shadowBlur = 8;
+            ctx.strokeStyle = '#c9a8ff';
             ctx.lineWidth = 1.5;
             ctx.beginPath();
             ctx.moveTo(8, 0);
@@ -563,7 +594,8 @@
     function loop(now) {
         const dt = Math.min(0.05, (now - last) / 1000);
         last = now;
-        if (state.running && !state.paused && !state.gameover) step(dt);
+        if (state.running && !state.paused && !state.gameover) { step(dt); updateHud(); }
+        else state.animTime += dt;
         render();
         requestAnimationFrame(loop);
     }
@@ -577,7 +609,7 @@
         if (k === 'ArrowLeft' || k === 'a' || k === 'A') state.keyL = true;
         else if (k === 'ArrowRight' || k === 'd' || k === 'D') state.keyR = true;
         else if (k === 'ArrowUp' || k === 'w' || k === 'W') state.keyT = true;
-        else if (k === ' ') fire();
+        else if (k === ' ') { state.keyFire = true; fire(); }
         else if (k === 'Shift') hyperspace();
         else if (k === 'p' || k === 'P' || k === 'Escape') togglePause();
         else if (k === 'r' || k === 'R') restart();
@@ -587,7 +619,9 @@
         if (k === 'ArrowLeft' || k === 'a' || k === 'A') state.keyL = false;
         if (k === 'ArrowRight' || k === 'd' || k === 'D') state.keyR = false;
         if (k === 'ArrowUp' || k === 'w' || k === 'W') state.keyT = false;
+        if (k === ' ') state.keyFire = false;
     });
+    window.addEventListener('blur', () => { state.keyL = state.keyR = state.keyT = state.keyFire = false; });
 
     document.querySelectorAll('[data-touch]').forEach(b => {
         const a = b.dataset.touch;
@@ -598,7 +632,7 @@
             if (a === 'left') state.keyL = true;
             else if (a === 'right') state.keyR = true;
             else if (a === 'thrust') state.keyT = true;
-            else if (a === 'fire') fire();
+            else if (a === 'fire') { state.keyFire = true; fire(); }
             else if (a === 'hyperspace') hyperspace();
             else if (a === 'pause') togglePause();
         };
@@ -610,6 +644,7 @@
             if (a === 'left') state.keyL = false;
             if (a === 'right') state.keyR = false;
             if (a === 'thrust') state.keyT = false;
+            if (a === 'fire') state.keyFire = false;
         };
         b.addEventListener('touchstart', press, { passive: false });
         b.addEventListener('touchend', release, { passive: false });
@@ -626,6 +661,7 @@
         if (!state.paused) last = performance.now();
     }
     function restart() {
+        ui.oTitle.classList.add('hidden');
         ui.oOver.classList.add('hidden');
         ui.oPause.classList.add('hidden');
         newGame();

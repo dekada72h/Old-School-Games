@@ -153,7 +153,9 @@
         animTime: 0,
         keyL: false, keyR: false, keyFire: false,
         fireCooldown: 0,
-        respawnTimer: 0
+        respawnTimer: 0,
+        invuln: 0,
+        freeze: 0
     };
 
     // ---------- Storage ----------
@@ -268,6 +270,7 @@
         state.wave = 1;
         state.gameover = false;
         state.player = { x: W / 2, y: H - 50, w: 44, h: 24, alive: true, deathT: 0 };
+        state.invuln = 0; state.freeze = 0;
         state.playerBullets = [];
         state.invaderBullets = [];
         state.particles = [];
@@ -287,7 +290,8 @@
         ui.waveTitle.textContent = `WAVE ${state.wave}`;
         ui.waveTag.textContent = state.wave === 1 ? 'Incoming...' : 'They\'re back. And meaner.';
         ui.oWave.classList.remove('hidden');
-        setTimeout(() => ui.oWave.classList.add('hidden'), 1500);
+        state.freeze = 1.4;
+        setTimeout(() => ui.oWave.classList.add('hidden'), 1400);
     }
 
     function updateHud() {
@@ -305,6 +309,10 @@
             s.y += s.sp * dt;
             if (s.y > H) { s.y = 0; s.x = Math.random() * W; }
         }
+        if (state.invuln > 0) state.invuln -= dt;
+        // Wave intro: let the player move but hold the invaders
+        const frozen = state.freeze > 0;
+        if (frozen) state.freeze -= dt;
 
         // Player
         if (state.player.alive) {
@@ -325,6 +333,7 @@
                 if (state.lives > 0) {
                     state.player.alive = true;
                     state.player.x = W / 2;
+                    state.invuln = 2;
                 } else {
                     gameOver();
                 }
@@ -334,14 +343,16 @@
         // Player bullets
         for (let i = state.playerBullets.length - 1; i >= 0; i--) {
             const b = state.playerBullets[i];
+            const prevY = b.y;
             b.y += b.vy * dt;
             if (b.y < -10) { state.playerBullets.splice(i, 1); continue; }
-            // hit invader
+            // hit invader (swept: covers the whole path travelled this frame)
             let hit = false;
+            const yTop = Math.min(prevY, b.y), yBot = Math.max(prevY, b.y + 14);
             for (const inv of state.invaders) {
                 if (!inv.alive) continue;
                 if (b.x >= inv.x - inv.w / 2 && b.x <= inv.x + inv.w / 2 &&
-                    b.y >= inv.y - inv.h / 2 && b.y <= inv.y + inv.h / 2) {
+                    yBot >= inv.y - inv.h / 2 && yTop <= inv.y + inv.h / 2) {
                     inv.alive = false;
                     state.score += inv.points;
                     spawnExplosion(inv.x, inv.y, COLORS['e' + inv.type], 14);
@@ -377,8 +388,8 @@
         const aliveInv = state.invaders.filter(i => i.alive);
         const remainingFrac = aliveInv.length / 55;
         const interval = Math.max(0.06, state.moveInterval * (0.2 + remainingFrac * 0.9));
-        state.moveTimer += dt;
-        if (state.moveTimer >= interval && aliveInv.length > 0) {
+        if (!frozen) state.moveTimer += dt;
+        if (!frozen && state.moveTimer >= interval && aliveInv.length > 0) {
             state.moveTimer = 0;
             state.spriteFrame ^= 1;
             let drop = false;
@@ -394,6 +405,7 @@
                 for (const inv of state.invaders) inv.x += 14 * state.moveDir;
             }
             blip(80 + state.spriteFrame * 30, 0.04, 'sawtooth', 0.04);
+            for (const inv of aliveInv) crushBunkers(inv);
 
             // Reach player?
             for (const inv of aliveInv) {
@@ -405,7 +417,7 @@
         }
 
         // Invader fire
-        if (aliveInv.length > 0 && Math.random() < 0.012 + state.wave * 0.002) {
+        if (!frozen && aliveInv.length > 0 && Math.random() < 0.012 + state.wave * 0.002) {
             // pick random column's bottom invader
             const cols = {};
             for (const inv of aliveInv) {
@@ -424,7 +436,7 @@
             b.y += b.vy * dt;
             if (b.y > H + 10) { state.invaderBullets.splice(i, 1); continue; }
             // hit player
-            if (state.player.alive &&
+            if (state.player.alive && state.invuln <= 0 &&
                 b.x >= state.player.x - state.player.w / 2 && b.x <= state.player.x + state.player.w / 2 &&
                 b.y >= state.player.y - state.player.h / 2 && b.y <= state.player.y + state.player.h / 2) {
                 state.invaderBullets.splice(i, 1);
@@ -472,6 +484,17 @@
 
         // Shake decay
         if (state.shake > 0) state.shake = Math.max(0, state.shake - dt * 30);
+    }
+
+    function crushBunkers(inv) {
+        for (const bk of state.bunkers) {
+            if (inv.x + inv.w / 2 < bk.x || inv.x - inv.w / 2 > bk.x + bk.gridW * bk.px ||
+                inv.y + inv.h / 2 < bk.y || inv.y - inv.h / 2 > bk.y + bk.gridH * bk.px) continue;
+            for (let y = 0; y < bk.gridH; y++) for (let x = 0; x < bk.gridW; x++) {
+                const bx = bk.x + x * bk.px + bk.px / 2, by = bk.y + y * bk.px + bk.px / 2;
+                if (Math.abs(bx - inv.x) < inv.w / 2 && Math.abs(by - inv.y) < inv.h / 2) bk.grid[y][x] = 0;
+            }
+        }
     }
 
     function hitBunker(x, y) {
@@ -528,14 +551,36 @@
     }
 
     // ---------- Render ----------
-    function drawSprite(spr, x, y, scale, color) {
-        ctx.fillStyle = color;
-        for (let r = 0; r < spr.length; r++) {
-            for (let c = 0; c < spr[r].length; c++) {
-                if (spr[r][c]) ctx.fillRect(x + c * scale, y + r * scale, scale, scale);
-            }
-        }
+    const spriteCache = new Map();
+    function spriteCanvas(spr, scale, color) {
+        let m = spriteCache.get(spr);
+        if (!m) { m = {}; spriteCache.set(spr, m); }
+        const key = scale + '|' + color;
+        if (m[key]) return m[key];
+        const pad = 10;
+        const c = document.createElement('canvas');
+        c.width = Math.ceil(spr[0].length * scale + pad * 2);
+        c.height = Math.ceil(spr.length * scale + pad * 2);
+        const g = c.getContext('2d');
+        g.shadowColor = color; g.shadowBlur = 9;
+        g.fillStyle = color;
+        for (let r = 0; r < spr.length; r++)
+            for (let col = 0; col < spr[r].length; col++)
+                if (spr[r][col]) g.fillRect(pad + col * scale, pad + r * scale, scale, scale);
+        g.shadowBlur = 0;
+        // highlight on the top rows
+        g.fillStyle = 'rgba(255,255,255,0.28)';
+        for (let r = 0; r < Math.min(2, spr.length); r++)
+            for (let col = 0; col < spr[r].length; col++)
+                if (spr[r][col]) g.fillRect(pad + col * scale, pad + r * scale, scale, scale);
+        m[key] = c;
+        return c;
     }
+    function drawSprite(spr, x, y, scale, color) {
+        ctx.drawImage(spriteCanvas(spr, scale, color), Math.round(x - 10), Math.round(y - 10));
+    }
+
+    let bgGrad = null;
 
     function render(dt) {
         ctx.save();
@@ -543,8 +588,21 @@
             ctx.translate((Math.random() - 0.5) * state.shake, (Math.random() - 0.5) * state.shake);
         }
 
-        ctx.fillStyle = COLORS.bg;
+        if (!bgGrad) {
+            bgGrad = ctx.createLinearGradient(0, 0, 0, H);
+            bgGrad.addColorStop(0, '#0b0722');
+            bgGrad.addColorStop(0.7, '#07041a');
+            bgGrad.addColorStop(1, '#030108');
+        }
+        ctx.fillStyle = bgGrad;
         ctx.fillRect(0, 0, W, H);
+        // soft nebula blobs
+        const neb = ctx.createRadialGradient(W * 0.2, H * 0.35, 10, W * 0.2, H * 0.35, 260);
+        neb.addColorStop(0, 'rgba(155,107,255,0.10)'); neb.addColorStop(1, 'rgba(155,107,255,0)');
+        ctx.fillStyle = neb; ctx.fillRect(0, 0, W, H);
+        const neb2 = ctx.createRadialGradient(W * 0.85, H * 0.6, 10, W * 0.85, H * 0.6, 280);
+        neb2.addColorStop(0, 'rgba(95,208,255,0.08)'); neb2.addColorStop(1, 'rgba(95,208,255,0)');
+        ctx.fillStyle = neb2; ctx.fillRect(0, 0, W, H);
 
         // Stars
         for (const s of state.stars) {
@@ -555,14 +613,17 @@
         ctx.globalAlpha = 1;
 
         // Bunkers
-        ctx.fillStyle = COLORS.bunker;
+        ctx.shadowColor = COLORS.bunker; ctx.shadowBlur = 8;
         for (const bk of state.bunkers) {
             for (let y = 0; y < bk.gridH; y++) {
                 for (let x = 0; x < bk.gridW; x++) {
-                    if (bk.grid[y][x]) ctx.fillRect(bk.x + x * bk.px, bk.y + y * bk.px, bk.px, bk.px);
+                    if (!bk.grid[y][x]) continue;
+                    ctx.fillStyle = y === 0 || !bk.grid[y - 1][x] ? '#7df5c7' : COLORS.bunker;
+                    ctx.fillRect(bk.x + x * bk.px, bk.y + y * bk.px, bk.px - 0.5, bk.px - 0.5);
                 }
             }
         }
+        ctx.shadowBlur = 0;
 
         // Invaders
         for (const inv of state.invaders) {
@@ -578,7 +639,8 @@
 
         // Player
         if (state.player.alive) {
-            drawSprite(SPR.player, state.player.x - 16, state.player.y - 12, 3, COLORS.player);
+            if (!(state.invuln > 0 && Math.floor(state.animTime * 14) % 2 === 0))
+                drawSprite(SPR.player, state.player.x - 16, state.player.y - 12, 3, COLORS.player);
         } else if (state.player.deathT > 0) {
             // Glitchy death
             for (let i = 0; i < 6; i++) {
@@ -588,13 +650,16 @@
         }
 
         // Bullets
+        ctx.shadowColor = '#5fd0ff'; ctx.shadowBlur = 10;
         ctx.fillStyle = COLORS.playerBullet;
         for (const b of state.playerBullets) ctx.fillRect(b.x - 1.5, b.y, 3, 14);
+        ctx.shadowColor = COLORS.enemyBullet;
         ctx.fillStyle = COLORS.enemyBullet;
         for (const b of state.invaderBullets) {
             const wig = Math.sin((b.y + state.animTime * 12) * 0.3) * 2;
             ctx.fillRect(b.x - 1.5 + wig, b.y - 7, 3, 14);
         }
+        ctx.shadowBlur = 0;
 
         // Particles
         for (const p of state.particles) {
@@ -624,7 +689,7 @@
     function loop(now) {
         const dt = Math.min(0.05, (now - last) / 1000);
         last = now;
-        if (state.running && !state.paused && !state.gameover) step(dt);
+        if (state.running && !state.paused && !state.gameover) { step(dt); updateHud(); }
         render(dt);
         requestAnimationFrame(loop);
     }
@@ -680,10 +745,12 @@
     }
 
     function restart() {
+        ui.oTitle.classList.add('hidden');
         ui.oOver.classList.add('hidden');
         ui.oPause.classList.add('hidden');
         ui.oWave.classList.add('hidden');
         resetGame();
+        state.invuln = 1.5;
         state.running = true;
         state.paused = false;
         last = performance.now();

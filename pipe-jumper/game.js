@@ -27,33 +27,73 @@
     const COLS_VIEW = W / TILE;   // 32
     const ROWS = H / TILE;        // 18
 
-    // ---------- Level layout (each row is exactly LEVEL_W chars wide) ----------
+    // ---------- Level layout (generated, always rectangular) ----------
     // ' ' = empty   '#' = ground top   '_' = ground under
     // 'B' = brick   '?' = ?-block coin   'M' = ?-block mushroom   'U' = used block
     // '[' ']' = pipe top-left/right   '{' '}' = pipe body-left/right
-    // '=' = solid stair block   'F' = flagpole   'C' = castle decoration
-    // 'g' = goomba spawn   'k' = koopa spawn   'c' = floating coin
-    // 'P' = player spawn
-    const LEVEL = [
-        '                                                                                ',
-        '                                                                                ',
-        '                                                                                ',
-        '                                                                                ',
-        '                                                                                ',
-        '                                                                                ',
-        '                                                                                ',
-        '                                                                                ',
-        '             ?B?M?            B?B                  ?B?       ?B?M               ',
-        '                                                                                ',
-        '                                                                                ',
-        '                                              [{                F               ',
-        '                       g            g    g    ]}    cc           F              ',
-        '                                                    ]}      ==    F             ',
-        '         c    g    =        ===   = [{              ]}    ====    F             ',
-        ' P    c c c =====  ===  k  ====   = ]}     g    g   ]}  ====== c  F          C  ',
-        '################   ###############   #############     ##############     ######',
-        '________________   _______________   _____________     ______________     ______'
-    ];
+    // '=' = solid stair block   'F' = flagpole   'C' = castle
+    // 'g' = goomba spawn   'k' = koopa spawn   'c' = floating coin   'P' = player spawn
+    //
+    // Jump physics: apex ~81 px (3.4 tiles). So "hit" blocks live on row 12 (bottom edge 4 tiles
+    // above the ground top) and pipes / steps are never taller than 3 tiles.
+    const LEVEL = (() => {
+        const ROWS_ = 18, COLS_ = 160, GROUND = 16;
+        const g = Array.from({ length: ROWS_ }, () => Array(COLS_).fill(' '));
+        const put = (c, r, ch) => { if (c >= 0 && c < COLS_ && r >= 0 && r < ROWS_) g[r][c] = ch; };
+        const row = (c, r, str) => { for (let i = 0; i < str.length; i++) if (str[i] !== '.') put(c + i, r, str[i]); };
+
+        // Ground with pits
+        const pits = [[28, 30], [58, 60], [92, 95], [117, 119], [135, 137]];
+        for (let c = 0; c < COLS_; c++) {
+            if (pits.some(([a, b]) => c >= a && c <= b)) continue;
+            put(c, GROUND, '#'); put(c, GROUND + 1, '_');
+        }
+        // Pipes (c = left column, h = height in tiles)
+        const pipe = (c, h) => {
+            const top = GROUND - h;
+            put(c, top, '['); put(c + 1, top, ']');
+            for (let r = top + 1; r < GROUND; r++) { put(c, r, '{'); put(c + 1, r, '}'); }
+        };
+        [[21, 2], [44, 2], [64, 3], [76, 2], [101, 2], [124, 3]].forEach(([c, h]) => pipe(c, h));
+
+        // Blocks (row 12 = reachable from below)
+        row(11, 12, '?B?M?');
+        row(33, 12, 'B?B');
+        row(36, 12, '?');
+        row(52, 12, 'B?BMB');
+        row(67, 12, '?B?');
+        row(82, 12, 'BBB?BBB');
+        row(105, 12, '?B?B?');
+        row(112, 12, 'B?M?B');
+
+        // Little hills of stair blocks
+        row(47, 15, '=');  row(47, 14, '=');  row(48, 15, '='); // small hill
+        row(68, 15, '==');  row(69, 14, '=');
+        row(88, 15, '==='); row(89, 14, '=='); row(90, 13, '=');
+        row(84, 15, '=');
+
+        // Final staircase + flag + castle
+        for (let i = 0; i < 6; i++) for (let h = 0; h <= i; h++) put(139 + i - 0, GROUND - 1 - h, '=');
+        for (let i = 0; i < 6; i++) { /* stair columns already filled */ }
+        for (let r = 6; r <= 15; r++) put(150, r, 'F');
+        put(150, GROUND, '=');
+        for (let r = 12; r <= 15; r++) for (let c = 154; c <= 158; c++) put(c, r, 'C');
+        for (let c = 155; c <= 157; c++) put(c, 11, 'C');
+        put(156, 14, ' '); put(156, 15, ' ');           // doorway
+
+        // Coins (floating)
+        row(5, 14, 'c c c');
+        row(27, 12, 'cccc');   row(57, 12, 'cccc');   row(91, 11, 'cccccc'); row(116, 12, 'ccccc'); row(134, 12, 'cccc');
+        row(18, 13, 'ccc');  row(38, 14, 'cc'); row(72, 13, 'ccc'); row(98, 13, 'cc'); row(110, 14, 'cc');
+
+        // Enemies (stand on row 15 = on the ground)
+        [18, 26, 36, 41, 55, 62, 70, 79, 85, 99, 108, 113, 122, 127].forEach(c => put(c, 15, 'g'));
+        [47 + 3, 74, 103, 115, 130].forEach(c => put(c, 15, 'k'));
+
+        // Player start
+        put(2, 15, 'P');
+        return g.map(r => r.join(''));
+    })();
 
     const COLS = LEVEL[0].length;
     const LEVEL_W = COLS * TILE;
@@ -170,7 +210,8 @@
                     playerStart = { x: c * TILE + TILE / 2, y: r * TILE + TILE - 11 };
                     row.push(' ');
                 } else if (ch === 'F') {
-                    if (!flag) flag = { x: c * TILE + TILE / 2, yTop: r * TILE };
+                    if (!flag) flag = { x: c * TILE + TILE / 2, yTop: r * TILE, yBot: r * TILE + TILE };
+                    else if (Math.abs(flag.x - (c * TILE + TILE / 2)) < 1) flag.yBot = r * TILE + TILE;
                     row.push('F');
                 } else {
                     row.push(ch);
@@ -366,13 +407,15 @@
 
         if (state.winT > 0) {
             state.winT -= dt;
-            // Slide flag down
-            state.flagDescent = Math.min(1, state.flagDescent + dt * 1.2);
             const p = state.player;
-            // Slide player along pole then walk to castle
-            if (state.flagDescent < 1) {
-                p.y += 60 * dt;
+            // Slide down the whole pole (flag cloth follows), then walk to the castle
+            const slideTo = state.flagPos.yBot - p.h / 2 - 1;
+            if (p.y < slideTo - 0.5) {
+                p.y = Math.min(slideTo, p.y + 190 * dt);
+                const span = Math.max(1, slideTo - state.slideFromY);
+                state.flagDescent = Math.min(1, (p.y - state.slideFromY) / span);
             } else {
+                state.flagDescent = 1;
                 p.x += 100 * dt;
                 p.vy += 1300 * dt;
                 p.y += p.vy * dt;
@@ -400,7 +443,7 @@
         if (state.flagPos && !state.won) {
             const p = state.player;
             const dx = Math.abs(p.x - state.flagPos.x);
-            if (dx < 14 && p.y > state.flagPos.yTop - 20) {
+            if (dx < 12 && p.y > state.flagPos.yTop - 20 && p.y < state.flagPos.yBot) {
                 triggerWin();
             }
         }
@@ -530,9 +573,11 @@
                 playerHit();
             }
         } else if (e.kind === 'koopa') {
+            if (e.sliding && e.kickGrace > 0) return;   // just kicked: don't hurt the kicker
             if (e.shell && !e.sliding) {
                 // Kick the shell
                 e.sliding = true;
+                e.kickGrace = 0.3;
                 e.vx = (p.x < e.x ? 280 : -280);
                 p.vy = -260;
                 state.score += 100;
@@ -598,13 +643,19 @@
 
     function triggerWin() {
         if (state.winT > 0) return;
-        state.winT = 3.2;
-        state.score += 5000;
-        spawnScorePop(state.flagPos.x, state.flagPos.yTop - 10, '5000');
+        state.winT = 4.5;
+        state.score += 1000;
+        spawnScorePop(state.flagPos.x, state.flagPos.yTop - 10, '1000');
         const p = state.player;
         p.x = state.flagPos.x - 6;
         p.vx = 0; p.vy = 0;
         p.facing = -1;
+        state.slideFromY = Math.min(p.y, state.flagPos.yBot - p.h / 2 - 2);
+        // Higher grab = bigger bonus (classic)
+        const bonus = Math.max(100, Math.round((state.flagPos.yBot - p.y) / TILE) * 500);
+        state.score += bonus;
+        spawnScorePop(p.x + 20, p.y - 10, String(bonus));
+        updateHud();
         for (let i = 0; i < 6; i++) setTimeout(() => blip(440 + i * 100, 0.1), i * 100);
     }
 
@@ -630,6 +681,7 @@
             // Cull enemies that fell into a pit but haven't been spliced yet.
             if (e.y > LEVEL_H + 40) { state.enemies.splice(i, 1); continue; }
 
+            if (e.kickGrace > 0) e.kickGrace -= dt;
             e.vy += 1300 * dt;
             if (e.vy > 700) e.vy = 700;
 
@@ -737,43 +789,66 @@
 
     // ---------- Render ----------
     function render() {
-        // Sky gradient
+        // Sky gradient + sun
         const grad = ctx.createLinearGradient(0, 0, 0, H);
         grad.addColorStop(0, COLORS.skyTop);
         grad.addColorStop(1, COLORS.skyBot);
         ctx.fillStyle = grad;
         ctx.fillRect(0, 0, W, H);
+        const sun = ctx.createRadialGradient(W - 110, 70, 6, W - 110, 70, 120);
+        sun.addColorStop(0, 'rgba(255,248,200,0.95)'); sun.addColorStop(0.25, 'rgba(255,240,170,0.5)'); sun.addColorStop(1, 'rgba(255,240,170,0)');
+        ctx.fillStyle = sun;
+        ctx.fillRect(W - 240, 0, 240, 200);
 
-        // Background hills (parallax 0.3)
-        const px = -state.camX * 0.3;
-        ctx.fillStyle = '#3a9050';
-        for (let i = 0; i < 6; i++) {
-            const x = (i * 280 + px) % (LEVEL_W);
-            const wrapped = x < -200 ? x + LEVEL_W : x;
+        // Distant mountains (parallax 0.12)
+        const mx = -state.camX * 0.12;
+        ctx.fillStyle = 'rgba(110,140,200,0.45)';
+        for (let i = 0; i < Math.ceil((LEVEL_W * 0.12 + W) / 260) + 2; i++) {
+            const x = i * 260 + mx;
+            if (x < -260 || x > W + 20) continue;
             ctx.beginPath();
-            ctx.arc(wrapped + 100, H - 96, 80, Math.PI, 0);
+            ctx.moveTo(x, H - 96);
+            ctx.lineTo(x + 110, H - 96 - 120 - (i % 3) * 22);
+            ctx.lineTo(x + 230, H - 96);
+            ctx.closePath();
             ctx.fill();
+        }
+        // Rolling hills (parallax 0.3)
+        const px = -state.camX * 0.3;
+        for (let i = 0; i < Math.ceil((LEVEL_W * 0.3 + W) / 280) + 2; i++) {
+            const x = i * 280 + px;
+            if (x < -240 || x > W + 20) continue;
+            const hg = ctx.createLinearGradient(0, H - 176, 0, H - 96);
+            hg.addColorStop(0, '#4fb26a'); hg.addColorStop(1, '#2f8a50');
+            ctx.fillStyle = hg;
+            ctx.beginPath();
+            ctx.arc(x + 100, H - 96, 80 + (i % 2) * 14, Math.PI, 0);
+            ctx.fill();
+            // hill eyes (cute)
+            ctx.fillStyle = 'rgba(0,0,0,0.22)';
+            ctx.fillRect(x + 90, H - 140 - (i % 2) * 10, 3, 9);
+            ctx.fillRect(x + 108, H - 140 - (i % 2) * 10, 3, 9);
         }
         // Bushes (parallax 0.5)
         const bx = -state.camX * 0.5;
         ctx.fillStyle = '#1d9d6e';
-        for (let i = 0; i < 8; i++) {
-            const x = (i * 220 + bx) % LEVEL_W;
-            const wrapped = x < -100 ? x + LEVEL_W : x;
+        for (let i = 0; i < Math.ceil((LEVEL_W * 0.5 + W) / 220) + 2; i++) {
+            const x = i * 220 + bx;
+            if (x < -100 || x > W + 20) continue;
             ctx.beginPath();
-            ctx.arc(wrapped + 30, H - 96, 18, Math.PI, 0);
-            ctx.arc(wrapped + 50, H - 96, 24, Math.PI, 0);
-            ctx.arc(wrapped + 75, H - 96, 18, Math.PI, 0);
+            ctx.arc(x + 30, H - 96, 18, Math.PI, 0);
+            ctx.arc(x + 50, H - 96, 24, Math.PI, 0);
+            ctx.arc(x + 75, H - 96, 18, Math.PI, 0);
             ctx.fill();
         }
-        // Clouds (parallax 0.2)
+        // Clouds (parallax 0.2), spread over the whole level
         const cx = -state.camX * 0.2;
-        ctx.fillStyle = 'rgba(255,255,255,0.85)';
-        const cloudPos = [[100, 50], [320, 80], [560, 40], [820, 70], [1100, 60], [1380, 50], [1620, 80]];
-        for (const [x, y] of cloudPos) {
-            const xx = (x + cx) % LEVEL_W;
-            const wrapped = xx < -50 ? xx + LEVEL_W : xx;
-            drawCloud(wrapped, y);
+        for (let i = 0; i < Math.ceil((LEVEL_W * 0.2 + W) / 230) + 2; i++) {
+            const x = i * 230 + ((i * 53) % 90) + cx;
+            if (x < -80 || x > W + 20) continue;
+            const y = 40 + ((i * 37) % 70);
+            ctx.fillStyle = 'rgba(255,255,255,0.9)';
+            drawCloud(x, y);
         }
 
         // Camera transform
@@ -808,6 +883,8 @@
 
         // Enemies
         for (const e of state.enemies) {
+            ctx.fillStyle = 'rgba(0,0,0,0.18)';
+            ctx.beginPath(); ctx.ellipse(e.x, e.y + e.h / 2, 9, 2.5, 0, 0, Math.PI * 2); ctx.fill();
             if (e.kind === 'goomba') drawGoomba(e);
             else if (e.kind === 'koopa') drawKoopa(e);
         }
@@ -847,133 +924,140 @@
 
     function drawTile(t, x, y) {
         switch (t) {
-            case '#': // Ground top
+            case '#': { // Ground top
                 ctx.fillStyle = COLORS.groundBody;
                 ctx.fillRect(x, y, TILE, TILE);
-                ctx.fillStyle = COLORS.groundTop;
-                ctx.fillRect(x, y, TILE, 6);
+                const gg = ctx.createLinearGradient(0, y, 0, y + 8);
+                gg.addColorStop(0, '#3fd08b'); gg.addColorStop(1, COLORS.groundTop);
+                ctx.fillStyle = gg;
+                ctx.fillRect(x, y, TILE, 7);
                 ctx.fillStyle = COLORS.groundEdge;
-                ctx.fillRect(x, y + 6, TILE, 2);
+                ctx.fillRect(x, y + 7, TILE, 2);
+                // grass blades
+                ctx.fillStyle = '#58e0a0';
+                for (let i = 2; i < TILE; i += 6) ctx.fillRect(x + i, y - 1, 2, 3);
                 ctx.fillStyle = COLORS.groundDark;
-                ctx.fillRect(x, y + TILE - 2, TILE, 2);
-                ctx.fillRect(x + TILE - 2, y + 8, 2, TILE - 8);
+                ctx.fillRect(x + TILE - 2, y + 9, 2, TILE - 9);
+                ctx.fillStyle = 'rgba(0,0,0,0.18)';
+                ctx.fillRect(x + 4, y + 14, 3, 2); ctx.fillRect(x + 14, y + 18, 3, 2);
                 break;
+            }
             case '_': // Underground
                 ctx.fillStyle = COLORS.groundBody;
                 ctx.fillRect(x, y, TILE, TILE);
                 ctx.fillStyle = COLORS.groundDark;
-                ctx.fillRect(x, y, TILE, 2);
-                ctx.fillRect(x, y + TILE - 2, TILE, 2);
+                ctx.fillRect(x, y, TILE, 1);
                 ctx.fillRect(x + TILE - 2, y, 2, TILE);
+                ctx.fillRect(x, y + TILE - 2, TILE, 2);
+                ctx.fillStyle = 'rgba(0,0,0,0.16)';
+                ctx.fillRect(x + 5, y + 6, 4, 3); ctx.fillRect(x + 15, y + 13, 4, 3);
+                ctx.fillStyle = 'rgba(255,255,255,0.08)';
+                ctx.fillRect(x + 11, y + 4, 3, 2);
                 break;
-            case 'B':
-                ctx.fillStyle = COLORS.brick;
+            case 'B': {
+                const bg = ctx.createLinearGradient(0, y, 0, y + TILE);
+                bg.addColorStop(0, '#dc8a44'); bg.addColorStop(1, COLORS.brick);
+                ctx.fillStyle = bg;
                 ctx.fillRect(x, y, TILE, TILE);
                 ctx.fillStyle = COLORS.brickDark;
-                ctx.fillRect(x, y, TILE, 2);
                 ctx.fillRect(x, y + 11, TILE, 2);
                 ctx.fillRect(x, y + TILE - 2, TILE, 2);
-                ctx.fillRect(x + 7, y + 2, 2, 9);
-                ctx.fillRect(x + 16, y + 2, 2, 9);
-                ctx.fillRect(x + 4, y + 13, 2, 9);
-                ctx.fillRect(x + 14, y + 13, 2, 9);
+                ctx.fillRect(x + 11, y, 2, 11);
+                ctx.fillRect(x + 5, y + 13, 2, 9);
+                ctx.fillRect(x + 17, y + 13, 2, 9);
+                ctx.fillRect(x + TILE - 2, y, 2, TILE);
+                ctx.fillStyle = 'rgba(255,255,255,0.25)';
+                ctx.fillRect(x, y, TILE, 2);
+                ctx.fillRect(x, y, 2, TILE - 2);
                 break;
+            }
             case '?':
             case 'M': {
-                const t2 = state.animTime * 4;
-                const flash = (Math.floor(t2) % 2) ? 1 : 0.85;
-                ctx.fillStyle = COLORS.qblock;
+                const pulse = 0.5 + 0.5 * Math.sin(state.animTime * 5);
+                const qg = ctx.createLinearGradient(0, y, 0, y + TILE);
+                qg.addColorStop(0, '#ffe08a'); qg.addColorStop(1, COLORS.qblock);
+                ctx.fillStyle = qg;
                 ctx.fillRect(x, y, TILE, TILE);
                 ctx.fillStyle = COLORS.qblockDark;
-                ctx.fillRect(x, y, TILE, 2);
                 ctx.fillRect(x, y + TILE - 2, TILE, 2);
-                ctx.fillRect(x, y, 2, TILE);
                 ctx.fillRect(x + TILE - 2, y, 2, TILE);
-                ctx.fillStyle = `rgba(0,0,0,${0.6 * flash})`;
-                ctx.font = "bold 16px 'Press Start 2P', monospace";
+                ctx.fillStyle = 'rgba(255,255,255,0.45)';
+                ctx.fillRect(x, y, TILE, 2); ctx.fillRect(x, y, 2, TILE - 2);
+                ctx.fillStyle = COLORS.qblockDark;
+                ctx.fillRect(x + 2, y + 2, 2, 2); ctx.fillRect(x + TILE - 4, y + 2, 2, 2);
+                ctx.fillRect(x + 2, y + TILE - 4, 2, 2); ctx.fillRect(x + TILE - 4, y + TILE - 4, 2, 2);
+                ctx.fillStyle = `rgba(90,50,0,${0.65 + 0.2 * pulse})`;
+                ctx.font = "bold 15px 'Press Start 2P', monospace";
                 ctx.textAlign = 'center';
                 ctx.textBaseline = 'middle';
+                ctx.fillText('?', x + TILE / 2 + 1, y + TILE / 2 + 2);
+                ctx.fillStyle = '#fff6c8';
                 ctx.fillText('?', x + TILE / 2, y + TILE / 2 + 1);
                 break;
             }
             case 'U':
                 ctx.fillStyle = COLORS.qblockUsed;
                 ctx.fillRect(x, y, TILE, TILE);
+                ctx.fillStyle = 'rgba(255,255,255,0.15)';
+                ctx.fillRect(x, y, TILE, 2); ctx.fillRect(x, y, 2, TILE);
                 ctx.fillStyle = COLORS.qblockDark;
-                ctx.fillRect(x, y, TILE, 2);
-                ctx.fillRect(x, y + TILE - 2, TILE, 2);
-                ctx.fillRect(x, y, 2, TILE);
-                ctx.fillRect(x + TILE - 2, y, 2, TILE);
+                ctx.fillRect(x, y + TILE - 2, TILE, 2); ctx.fillRect(x + TILE - 2, y, 2, TILE);
+                ctx.fillRect(x + 2, y + 2, 2, 2); ctx.fillRect(x + TILE - 4, y + 2, 2, 2);
+                ctx.fillRect(x + 2, y + TILE - 4, 2, 2); ctx.fillRect(x + TILE - 4, y + TILE - 4, 2, 2);
                 break;
-            case '[': // pipe top-left
-                ctx.fillStyle = COLORS.pipe;
-                ctx.fillRect(x, y, TILE, TILE);
-                ctx.fillStyle = COLORS.pipeDark;
-                ctx.fillRect(x, y + TILE - 4, TILE, 4);
-                ctx.fillRect(x, y, 4, TILE);
-                ctx.fillStyle = COLORS.pipeRim;
-                ctx.fillRect(x, y, TILE - 1, 6);
-                ctx.fillRect(x - 3, y, TILE + 3, 4);
-                ctx.fillStyle = COLORS.pipeDark;
-                ctx.fillRect(x - 3, y, TILE + 3, 2);
-                break;
-            case ']': // pipe top-right
-                ctx.fillStyle = COLORS.pipe;
-                ctx.fillRect(x, y, TILE, TILE);
-                ctx.fillStyle = COLORS.pipeDark;
-                ctx.fillRect(x, y + TILE - 4, TILE, 4);
-                ctx.fillRect(x + TILE - 4, y, 4, TILE);
-                ctx.fillStyle = COLORS.pipeRim;
-                ctx.fillRect(x + 1, y, TILE - 1, 6);
-                ctx.fillRect(x, y, TILE + 3, 4);
-                ctx.fillStyle = COLORS.pipeDark;
-                ctx.fillRect(x, y, TILE + 3, 2);
-                break;
-            case '{': // pipe body left
-                ctx.fillStyle = COLORS.pipe;
-                ctx.fillRect(x, y, TILE, TILE);
-                ctx.fillStyle = COLORS.pipeDark;
-                ctx.fillRect(x, y, 4, TILE);
-                ctx.fillStyle = COLORS.pipeRim;
-                ctx.fillRect(x + 4, y, 4, TILE);
-                break;
-            case '}': // pipe body right
-                ctx.fillStyle = COLORS.pipe;
-                ctx.fillRect(x, y, TILE, TILE);
-                ctx.fillStyle = COLORS.pipeDark;
-                ctx.fillRect(x + TILE - 4, y, 4, TILE);
-                ctx.fillStyle = COLORS.pipeRim;
-                ctx.fillRect(x + 8, y, 4, TILE);
-                break;
-            case '=':
-                ctx.fillStyle = COLORS.stair;
-                ctx.fillRect(x, y, TILE, TILE);
-                ctx.fillStyle = COLORS.stairDark;
-                ctx.fillRect(x, y, TILE, 2);
-                ctx.fillRect(x, y + TILE - 2, TILE, 2);
-                ctx.fillRect(x + TILE - 3, y, 3, TILE);
-                break;
-            case 'F':
-                // Flag pole (just a thin column)
-                ctx.fillStyle = COLORS.flagPole;
-                ctx.fillRect(x + TILE / 2 - 2, y, 4, TILE);
-                if (y < (state.flagPos ? state.flagPos.yTop + 8 : 9999)) {
-                    // ball on top of pole
-                    ctx.beginPath();
-                    ctx.fillStyle = COLORS.flagCloth;
-                    ctx.arc(x + TILE / 2, y - 2, 5, 0, Math.PI * 2);
-                    ctx.fill();
+            case '[': case ']': case '{': case '}': {
+                const left = t === '[' || t === '{';
+                const top = t === '[' || t === ']';
+                const pg = ctx.createLinearGradient(x, 0, x + TILE, 0);
+                if (left) { pg.addColorStop(0, '#0d6b4a'); pg.addColorStop(0.35, '#4be8b0'); pg.addColorStop(1, COLORS.pipe); }
+                else { pg.addColorStop(0, COLORS.pipe); pg.addColorStop(0.65, '#36c98f'); pg.addColorStop(1, '#0a5a3d'); }
+                ctx.fillStyle = pg;
+                if (top) {
+                    ctx.fillRect(x - (left ? 3 : 0), y, TILE + 3, TILE);
+                    ctx.fillStyle = 'rgba(0,0,0,0.25)';
+                    ctx.fillRect(x - (left ? 3 : 0), y + TILE - 3, TILE + 3, 3);
+                    ctx.fillStyle = 'rgba(255,255,255,0.35)';
+                    ctx.fillRect(x - (left ? 3 : 0), y, TILE + 3, 2);
+                } else {
+                    ctx.fillRect(x, y, TILE, TILE);
                 }
                 break;
+            }
+            case '=': {
+                const sg = ctx.createLinearGradient(x, y, x + TILE, y + TILE);
+                sg.addColorStop(0, '#dcbb90'); sg.addColorStop(1, COLORS.stair);
+                ctx.fillStyle = sg;
+                ctx.fillRect(x, y, TILE, TILE);
+                ctx.fillStyle = 'rgba(255,255,255,0.35)';
+                ctx.fillRect(x, y, TILE, 2); ctx.fillRect(x, y, 2, TILE);
+                ctx.fillStyle = COLORS.stairDark;
+                ctx.fillRect(x, y + TILE - 3, TILE, 3); ctx.fillRect(x + TILE - 3, y, 3, TILE);
+                break;
+            }
+            case 'F': {
+                const pg = ctx.createLinearGradient(x + TILE / 2 - 3, 0, x + TILE / 2 + 3, 0);
+                pg.addColorStop(0, '#9aa'); pg.addColorStop(0.5, '#fff'); pg.addColorStop(1, '#889');
+                ctx.fillStyle = pg;
+                ctx.fillRect(x + TILE / 2 - 2, y, 4, TILE);
+                if (state.flagPos && Math.abs(y - state.flagPos.yTop) < 1) {
+                    ctx.beginPath();
+                    ctx.fillStyle = '#ffd06b';
+                    ctx.shadowColor = '#ffd06b'; ctx.shadowBlur = 8;
+                    ctx.arc(x + TILE / 2, y - 3, 6, 0, Math.PI * 2);
+                    ctx.fill();
+                    ctx.shadowBlur = 0;
+                }
+                break;
+            }
             case 'C':
                 ctx.fillStyle = COLORS.castle;
                 ctx.fillRect(x, y, TILE, TILE);
+                ctx.fillStyle = 'rgba(255,255,255,0.2)';
+                ctx.fillRect(x, y, TILE, 2);
                 ctx.fillStyle = COLORS.castleDark;
-                // crenellations
-                ctx.fillRect(x, y, 6, 4);
-                ctx.fillRect(x + 9, y, 6, 4);
-                ctx.fillRect(x + 18, y, 6, 4);
-                ctx.fillRect(x, y + TILE - 2, TILE, 2);
+                ctx.fillRect(x, y + 11, TILE, 2);
+                ctx.fillRect(x + 11, y, 2, 11);
+                ctx.fillRect(x + 5, y + 13, 2, 11); ctx.fillRect(x + 17, y + 13, 2, 11);
                 break;
         }
     }
@@ -983,7 +1067,7 @@
         if (!state.flagPos) return;
         const fx = state.flagPos.x;
         const yTop = state.flagPos.yTop + 6;
-        const yBot = state.flagPos.yTop + 4 * TILE - 24;
+        const yBot = state.flagPos.yBot - 22;
         const cy = yTop + (yBot - yTop) * state.flagDescent;
         ctx.fillStyle = COLORS.flagCloth;
         ctx.beginPath();
@@ -1225,6 +1309,7 @@
     }
 
     function restart() {
+        ui.oTitle.classList.add('hidden');
         ui.oOver.classList.add('hidden');
         ui.oWin.classList.add('hidden');
         ui.oPause.classList.add('hidden');
@@ -1245,7 +1330,8 @@
     function loop(now) {
         const dt = Math.min(0.05, (now - last) / 1000);
         last = now;
-        if (state.running && !state.paused && !state.gameover) step(dt);
+        if (state.running && !state.paused && !state.gameover) { step(dt); updateHud(); }
+        else state.animTime += dt;
         render();
         // Flag cloth (drawn outside camera transform was wrong; redraw here over the scene)
         if (state.flagPos && state.flagDescent > 0) {
@@ -1272,6 +1358,7 @@
         else if (k === 'p' || k === 'P' || k === 'Escape') togglePause();
         else if (k === 'r' || k === 'R') restart();
     });
+    window.addEventListener('blur', () => { state.keyL = state.keyR = state.keyD = state.keyRun = state.jumpHeld = false; });
     document.addEventListener('keyup', (e) => {
         const k = e.key;
         if (k === 'ArrowLeft' || k === 'a' || k === 'A') state.keyL = false;

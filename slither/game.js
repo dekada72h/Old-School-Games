@@ -54,6 +54,7 @@
         snake: [],          // [{x,y}], head first
         dir: { x: 1, y: 0 },
         nextDir: { x: 1, y: 0 },
+        queue: [],
         food: null,
         gold: null,         // bonus food, occasional
         wrap: true,
@@ -129,6 +130,7 @@
         ];
         state.dir = { x: 1, y: 0 };
         state.nextDir = { x: 1, y: 0 };
+        state.queue = [];
         state.score = 0;
         state.eaten = 0;
         state.speed = 1;
@@ -144,6 +146,7 @@
     }
 
     function spawnFood() {
+        if (state.snake.length >= COLS * ROWS - 1) { state.food = { x: -5, y: -5, t: 0 }; return; }
         let x, y, ok;
         do {
             x = Math.floor(Math.random() * COLS);
@@ -155,7 +158,7 @@
     }
 
     function maybeSpawnGold() {
-        if (state.gold) return;
+        if (state.gold || state.snake.length >= COLS * ROWS - 3) return;
         let x, y, ok;
         let tries = 0;
         do {
@@ -170,9 +173,9 @@
 
     function step() {
         // Apply queued direction (if not 180°)
-        const nd = state.nextDir;
-        if (!(nd.x === -state.dir.x && nd.y === -state.dir.y)) {
-            state.dir = nd;
+        if (state.queue.length) {
+            const nd = state.queue.shift();
+            if (!(nd.x === -state.dir.x && nd.y === -state.dir.y)) state.dir = nd;
         }
 
         const head = state.snake[0];
@@ -186,8 +189,11 @@
             return die();
         }
 
-        // Self-collision (skip the tail tip which moves out)
-        for (let i = 0; i < state.snake.length - 1; i++) {
+        // Self-collision (the tail tip moves out unless we are about to grow)
+        const growing = (state.food.x === nx && state.food.y === ny) ||
+                        (state.gold && state.gold.x === nx && state.gold.y === ny);
+        const limit = growing ? state.snake.length : state.snake.length - 1;
+        for (let i = 0; i < limit; i++) {
             if (state.snake[i].x === nx && state.snake[i].y === ny) return die();
         }
 
@@ -264,23 +270,22 @@
     function render(dt) {
         state.animTime += dt;
 
-        // Background
+        // Background: checkerboard on a soft vignette
         ctx.fillStyle = COLORS.bg;
         ctx.fillRect(0, 0, cv.width, cv.height);
-
-        // Soft grid
-        ctx.strokeStyle = COLORS.grid;
-        ctx.lineWidth = 1;
-        ctx.beginPath();
-        for (let x = 0; x <= COLS; x++) {
-            ctx.moveTo(x * CELL + 0.5, 0);
-            ctx.lineTo(x * CELL + 0.5, cv.height);
+        for (let y = 0; y < ROWS; y++) {
+            for (let x = 0; x < COLS; x++) {
+                if ((x + y) & 1) {
+                    ctx.fillStyle = 'rgba(54, 227, 164, 0.035)';
+                    ctx.fillRect(x * CELL, y * CELL, CELL, CELL);
+                }
+            }
         }
-        for (let y = 0; y <= ROWS; y++) {
-            ctx.moveTo(0, y * CELL + 0.5);
-            ctx.lineTo(cv.width, y * CELL + 0.5);
-        }
-        ctx.stroke();
+        const vg = ctx.createRadialGradient(cv.width / 2, cv.height / 2, cv.width * 0.25, cv.width / 2, cv.height / 2, cv.width * 0.75);
+        vg.addColorStop(0, 'rgba(0,0,0,0)');
+        vg.addColorStop(1, 'rgba(0,0,0,0.55)');
+        ctx.fillStyle = vg;
+        ctx.fillRect(0, 0, cv.width, cv.height);
 
         // Wall border (when wrap off)
         if (!state.wrap) {
@@ -300,10 +305,22 @@
             grad.addColorStop(1, 'transparent');
             ctx.fillStyle = grad;
             ctx.fillRect(fx - CELL * 1.2, fy - CELL * 1.2, CELL * 2.4, CELL * 2.4);
-            // dot
-            ctx.fillStyle = COLORS.food;
+            // apple body + shine + leaf
+            const rr = (CELL / 2 - 3) * pulse;
+            const ag = ctx.createRadialGradient(fx - 3, fy - 3, 1, fx, fy, rr + 2);
+            ag.addColorStop(0, '#ff8aa5');
+            ag.addColorStop(1, COLORS.food);
+            ctx.fillStyle = ag;
             ctx.beginPath();
-            ctx.arc(fx, fy, (CELL / 2 - 4) * pulse, 0, Math.PI * 2);
+            ctx.arc(fx, fy + 1, rr, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.fillStyle = '#36e3a4';
+            ctx.beginPath();
+            ctx.ellipse(fx + 4, fy - rr + 1, 4, 2, -0.6, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.fillStyle = 'rgba(255,255,255,0.55)';
+            ctx.beginPath();
+            ctx.arc(fx - rr * 0.35, fy - rr * 0.2, 2, 0, Math.PI * 2);
             ctx.fill();
         }
 
@@ -330,32 +347,60 @@
             ctx.globalAlpha = 1;
         }
 
-        // Snake
-        for (let i = state.snake.length - 1; i >= 0; i--) {
+        // Snake: connected rounded segments with a head-to-tail gradient
+        ctx.shadowColor = 'rgba(54,227,164,0.55)';
+        ctx.shadowBlur = 12;
+        const n = state.snake.length;
+        const col = (i) => {
+            const t = n > 1 ? i / (n - 1) : 0;
+            const r = Math.round(125 + (29 - 125) * t), g = Math.round(245 + (157 - 245) * t), bl = Math.round(199 + (110 - 199) * t);
+            return `rgb(${r},${g},${bl})`;
+        };
+        for (let i = n - 1; i >= 0; i--) {
             const seg = state.snake[i];
-            const isHead = i === 0;
-            const x = seg.x * CELL;
-            const y = seg.y * CELL;
-            const t = i / state.snake.length;
-            const fade = 1 - t * 0.4;
-
-            // Body
-            ctx.fillStyle = isHead ? COLORS.head :
-                `rgba(${Math.round(54 * fade + 30)}, ${Math.round(227 * fade)}, ${Math.round(164 * fade)}, 1)`;
-            roundRect(x + 2, y + 2, CELL - 4, CELL - 4, 4);
+            const x = seg.x * CELL, y = seg.y * CELL;
+            const inset = i === 0 ? 1.5 : 3 + Math.min(2, i / n * 2);
+            ctx.fillStyle = col(i);
+            // connector to the next segment toward the tail
+            const nx = state.snake[i + 1];
+            if (nx && Math.abs(nx.x - seg.x) + Math.abs(nx.y - seg.y) === 1) {
+                const mx = Math.min(seg.x, nx.x) * CELL, my = Math.min(seg.y, nx.y) * CELL;
+                const w = nx.x !== seg.x ? CELL * 2 : CELL, h = nx.y !== seg.y ? CELL * 2 : CELL;
+                ctx.fillRect(mx + (nx.x !== seg.x ? CELL / 2 : inset), my + (nx.y !== seg.y ? CELL / 2 : inset),
+                    nx.x !== seg.x ? CELL : CELL - inset * 2, nx.y !== seg.y ? CELL : CELL - inset * 2);
+            }
+            roundRect(x + inset, y + inset, CELL - inset * 2, CELL - inset * 2, 6);
             ctx.fill();
-
-            // Head detail (eyes)
-            if (isHead) {
+        }
+        ctx.shadowBlur = 0;
+        // scale highlights
+        ctx.fillStyle = 'rgba(255,255,255,0.18)';
+        for (let i = 1; i < n; i += 2) {
+            const seg = state.snake[i];
+            ctx.beginPath();
+            ctx.arc(seg.x * CELL + CELL / 2, seg.y * CELL + CELL / 2 - 2, 3, 0, Math.PI * 2);
+            ctx.fill();
+        }
+        // head: eyes
+        {
+            const h = state.snake[0];
+            const cx = h.x * CELL + CELL / 2, cy = h.y * CELL + CELL / 2;
+            const dx = state.dir.x, dy = state.dir.y;
+            for (const sgn of [-1, 1]) {
+                const ex = cx + dx * 4 - dy * 5 * sgn * -1 * -1, ey = cy + dy * 4 + dx * 5 * sgn;
+                const exx = cx + dx * 4 + dy * 5 * sgn, eyy = cy + dy * 4 - dx * 5 * sgn;
+                ctx.fillStyle = '#fff';
+                ctx.beginPath(); ctx.arc(exx, eyy, 3.4, 0, Math.PI * 2); ctx.fill();
                 ctx.fillStyle = '#0a0617';
-                const cx = x + CELL / 2;
-                const cy = y + CELL / 2;
-                const dx = state.dir.x;
-                const dy = state.dir.y;
+                ctx.beginPath(); ctx.arc(exx + dx * 1.2, eyy + dy * 1.2, 1.7, 0, Math.PI * 2); ctx.fill();
+            }
+            // tongue flicker
+            if (Math.floor(state.animTime * 3) % 3 === 0) {
+                ctx.strokeStyle = '#ff2e63'; ctx.lineWidth = 2;
                 ctx.beginPath();
-                ctx.arc(cx + dx * 4 - dy * 5, cy + dy * 4 + dx * 5, 2.2, 0, Math.PI * 2);
-                ctx.arc(cx + dx * 4 + dy * 5, cy + dy * 4 - dx * 5, 2.2, 0, Math.PI * 2);
-                ctx.fill();
+                ctx.moveTo(cx + dx * 10, cy + dy * 10);
+                ctx.lineTo(cx + dx * 15, cy + dy * 15);
+                ctx.stroke();
             }
         }
 
@@ -432,9 +477,11 @@
 
     // ---------- Input ----------
     function setDir(x, y) {
-        // ignore opposite of current actual direction
-        if (state.dir.x === -x && state.dir.y === -y) return;
-        state.nextDir = { x, y };
+        if (!state.running || state.paused) return;
+        // validate against the last queued direction so quick double-taps work
+        const ref = state.queue.length ? state.queue[state.queue.length - 1] : state.dir;
+        if ((ref.x === -x && ref.y === -y) || (ref.x === x && ref.y === y)) return;
+        if (state.queue.length < 3) state.queue.push({ x, y });
     }
     document.addEventListener('keydown', (e) => {
         const k = e.key;
@@ -443,12 +490,18 @@
         else if (k === 'ArrowDown' || k === 's' || k === 'S') setDir(0, 1);
         else if (k === 'ArrowLeft' || k === 'a' || k === 'A') setDir(-1, 0);
         else if (k === 'ArrowRight' || k === 'd' || k === 'D') setDir(1, 0);
-        else if (k === ' ') state.boost = true;
+        else if (k === ' ') {
+            if (!state.running && !ui.overlayTitle.classList.contains('hidden')) restart();
+            else if (state.gameover) restart();
+            else state.boost = true;
+        }
+        else if (k === 'Enter' && (state.gameover || !state.running)) restart();
         else if (k === 'p' || k === 'P') togglePause();
         else if (k === 'r' || k === 'R') restart();
         else if (k === 'Escape') togglePause();
     });
     document.addEventListener('keyup', (e) => { if (e.key === ' ') state.boost = false; });
+    window.addEventListener('blur', () => { state.boost = false; });
 
     // Touch
     document.querySelectorAll('[data-touch]').forEach(b => {
@@ -499,6 +552,8 @@
         if (!state.paused) last = performance.now();
     }
     function restart() {
+        state.wrap = ui.wrapToggle.checked;
+        ui.overlayTitle.classList.add('hidden');
         ui.overlayGameover.classList.add('hidden');
         ui.overlayPause.classList.add('hidden');
         reset();

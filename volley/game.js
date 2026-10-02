@@ -175,8 +175,15 @@
         }
 
         state.ball.trail.push({ x: state.ball.x, y: state.ball.y });
-        if (state.ball.trail.length > 14) state.ball.trail.shift();
+        if (state.ball.trail.length > 16) state.ball.trail.shift();
 
+        // Sub-step so fast balls can never tunnel through a paddle
+        const maxMove = Math.max(Math.abs(state.ball.vx), Math.abs(state.ball.vy)) * dt;
+        const subs = Math.max(1, Math.ceil(maxMove / 6));
+        for (let i = 0; i < subs && !state.ended && state.serveT <= 0; i++) moveBall(dt / subs);
+    }
+
+    function moveBall(dt) {
         state.ball.x += state.ball.vx * dt;
         state.ball.y += state.ball.vy * dt;
 
@@ -277,9 +284,30 @@
         setTimeout(() => ui.oEnd.classList.remove('hidden'), 600);
     }
 
+    let bgGrad = null;
+    function glowRect(x, y, w, h, color, blur) {
+        ctx.shadowColor = color; ctx.shadowBlur = blur;
+        ctx.fillStyle = color;
+        ctx.fillRect(x, y, w, h);
+        ctx.shadowBlur = 0;
+    }
+
     function render() {
-        ctx.fillStyle = COLORS.bg;
+        if (!bgGrad) {
+            bgGrad = ctx.createRadialGradient(W / 2, H / 2, 40, W / 2, H / 2, W * 0.65);
+            bgGrad.addColorStop(0, '#120a2a');
+            bgGrad.addColorStop(1, '#030107');
+        }
+        ctx.fillStyle = bgGrad;
         ctx.fillRect(0, 0, W, H);
+
+        // Court: glowing borders + centre circle
+        ctx.strokeStyle = 'rgba(95,208,255,0.35)';
+        ctx.lineWidth = 3;
+        ctx.shadowColor = '#5fd0ff'; ctx.shadowBlur = 12;
+        ctx.strokeRect(2, 2, W - 4, H - 4);
+        ctx.beginPath(); ctx.arc(W / 2, H / 2, 60, 0, Math.PI * 2); ctx.stroke();
+        ctx.shadowBlur = 0;
 
         // Score flash
         if (state.flash > 0) {
@@ -289,42 +317,46 @@
 
         // Net
         ctx.fillStyle = COLORS.net;
-        for (let y = 0; y < H; y += 24) {
-            ctx.fillRect(W / 2 - 2, y + 4, 4, 14);
-        }
+        for (let y = 0; y < H; y += 24) ctx.fillRect(W / 2 - 2, y + 4, 4, 14);
 
         // Big background scores
-        ctx.fillStyle = 'rgba(255,255,255,0.04)';
         ctx.font = "bold 160px 'Press Start 2P', monospace";
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
+        ctx.fillStyle = 'rgba(95,208,255,0.09)';
         ctx.fillText(state.scoreP, W / 4, H / 2);
+        ctx.fillStyle = 'rgba(255,102,204,0.09)';
         ctx.fillText(state.scoreC, 3 * W / 4, H / 2);
 
-        // Ball trail
+        // Ball trail (hot when fast)
+        const spd = Math.hypot(state.ball.vx, state.ball.vy);
+        const hot = Math.min(1, Math.max(0, (spd / state.ballSpeed - 1) / 0.8));
+        const tc = `255,${Math.round(255 - hot * 120)},${Math.round(255 - hot * 190)}`;
         for (let i = 0; i < state.ball.trail.length; i++) {
             const t = state.ball.trail[i];
-            const a = (i / state.ball.trail.length) * 0.5;
-            ctx.fillStyle = `rgba(255,255,255,${a})`;
-            ctx.fillRect(t.x - 4, t.y - 4, 8, 8);
+            const k = i / state.ball.trail.length;
+            ctx.fillStyle = `rgba(${tc},${k * 0.5})`;
+            ctx.beginPath();
+            ctx.arc(t.x, t.y, BALL_R * (0.35 + k * 0.6), 0, Math.PI * 2);
+            ctx.fill();
         }
 
         // Ball
-        ctx.fillStyle = COLORS.ball;
-        ctx.fillRect(state.ball.x - BALL_R, state.ball.y - BALL_R, BALL_R * 2, BALL_R * 2);
+        ctx.shadowColor = `rgb(${tc})`; ctx.shadowBlur = 18;
+        ctx.fillStyle = '#fff';
+        ctx.beginPath();
+        ctx.arc(state.ball.x, state.ball.y, BALL_R, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.shadowBlur = 0;
 
-        // Paddles (with subtle accent)
-        const px = 18;
-        ctx.fillStyle = COLORS.paddle;
-        ctx.fillRect(px, state.pY - PADDLE_H / 2, PADDLE_W, PADDLE_H);
-        ctx.fillStyle = COLORS.paddleP;
-        ctx.fillRect(px, state.pY - PADDLE_H / 2, 3, PADDLE_H);
-
-        const cx = W - 18 - PADDLE_W;
-        ctx.fillStyle = COLORS.paddle;
-        ctx.fillRect(cx, state.cY - PADDLE_H / 2, PADDLE_W, PADDLE_H);
-        ctx.fillStyle = COLORS.paddleC;
-        ctx.fillRect(cx + PADDLE_W - 3, state.cY - PADDLE_H / 2, 3, PADDLE_H);
+        // Paddles
+        const px = 18, cx = W - 18 - PADDLE_W;
+        glowRect(px, state.pY - PADDLE_H / 2, PADDLE_W, PADDLE_H, COLORS.paddleP, 16);
+        ctx.fillStyle = 'rgba(255,255,255,0.7)';
+        ctx.fillRect(px + PADDLE_W - 4, state.pY - PADDLE_H / 2 + 3, 2, PADDLE_H - 6);
+        glowRect(cx, state.cY - PADDLE_H / 2, PADDLE_W, PADDLE_H, COLORS.paddleC, 16);
+        ctx.fillStyle = 'rgba(255,255,255,0.7)';
+        ctx.fillRect(cx + 2, state.cY - PADDLE_H / 2 + 3, 2, PADDLE_H - 6);
 
         // Sparks
         for (const s of state.sparks) {
@@ -355,8 +387,8 @@
 
     document.addEventListener('keydown', (e) => {
         if (['ArrowUp','ArrowDown',' '].includes(e.key)) e.preventDefault();
-        if (e.key === 'ArrowUp' || e.key === 'w' || e.key === 'W') state.keyU = true;
-        else if (e.key === 'ArrowDown' || e.key === 's' || e.key === 'S') state.keyD = true;
+        if (e.key === 'ArrowUp' || e.key === 'w' || e.key === 'W') { state.keyU = true; state.mouseY = null; }
+        else if (e.key === 'ArrowDown' || e.key === 's' || e.key === 'S') { state.keyD = true; state.mouseY = null; }
         else if (e.key === 'p' || e.key === 'P' || e.key === 'Escape') togglePause();
         else if (e.key === 'r' || e.key === 'R') restart();
     });
@@ -365,6 +397,7 @@
         else if (e.key === 'ArrowDown' || e.key === 's' || e.key === 'S') state.keyD = false;
     });
 
+    window.addEventListener('blur', () => { state.keyU = false; state.keyD = false; });
     cv.addEventListener('mousemove', (e) => {
         const r = cv.getBoundingClientRect();
         state.mouseY = (e.clientY - r.top) * (H / r.height);

@@ -183,13 +183,15 @@
         // Player missiles
         for (let i = state.playerMissiles.length - 1; i >= 0; i--) {
             const m = state.playerMissiles[i];
+            const px = m.x, py = m.y;
             m.x += m.vx * dt;
             m.y += m.vy * dt;
             m.trail.push({ x: m.x, y: m.y });
             if (m.trail.length > 30) m.trail.shift();
-            // Reached target
+            // Reached target: close enough OR passed it this frame (dot product flips)
             const dx = m.tx - m.x, dy = m.ty - m.y;
-            if (dx * dx + dy * dy < 36 || m.y < 0) {
+            const passed = (m.tx - px) * (m.tx - m.x) + (m.ty - py) * (m.ty - m.y) <= 0;
+            if (dx * dx + dy * dy < 36 || passed || m.y < 0) {
                 state.explosions.push({
                     x: m.tx, y: m.ty, r: 0,
                     maxR: 60, age: 0, life: 0.9,
@@ -386,64 +388,100 @@
     }
 
     // ---------- Render ----------
+    let skyGrad = null, groundGrad = null;
+    const skyStars = Array.from({ length: 70 }, (_, i) => ({ x: (i * 137) % W, y: (i * 71) % (GROUND_Y - 120), a: 0.2 + (i % 5) * 0.1 }));
+    const mountains = (() => {
+        const pts = [];
+        for (let x = 0; x <= W; x += 20) pts.push({ x, y: GROUND_Y - 30 - Math.abs(Math.sin(x * 0.011) * 40 + Math.sin(x * 0.027 + 1) * 22) });
+        return pts;
+    })();
+
     function render() {
-        ctx.fillStyle = COLORS.bg;
+        if (!skyGrad) {
+            skyGrad = ctx.createLinearGradient(0, 0, 0, GROUND_Y);
+            skyGrad.addColorStop(0, '#05030f');
+            skyGrad.addColorStop(0.6, '#150a30');
+            skyGrad.addColorStop(1, '#3b1646');
+            groundGrad = ctx.createLinearGradient(0, GROUND_Y, 0, H);
+            groundGrad.addColorStop(0, '#4a3212');
+            groundGrad.addColorStop(1, '#1d1206');
+        }
+        ctx.fillStyle = skyGrad;
         ctx.fillRect(0, 0, W, H);
 
         // Stars
-        ctx.fillStyle = 'rgba(255,255,255,0.4)';
-        for (let i = 0; i < 50; i++) {
-            const x = (i * 137 + state.animTime * 5) % W;
-            const y = (i * 71) % (GROUND_Y - 100);
-            ctx.fillRect(x, y, 1, 1);
+        for (const s of skyStars) {
+            ctx.globalAlpha = s.a * (0.6 + 0.4 * Math.sin(state.animTime * 2 + s.x));
+            ctx.fillStyle = '#fff';
+            ctx.fillRect(s.x, s.y, 1.5, 1.5);
         }
+        ctx.globalAlpha = 1;
+
+        // Mountain silhouette
+        ctx.fillStyle = '#1a0e33';
+        ctx.beginPath();
+        ctx.moveTo(0, GROUND_Y);
+        for (const p of mountains) ctx.lineTo(p.x, p.y);
+        ctx.lineTo(W, GROUND_Y);
+        ctx.closePath();
+        ctx.fill();
 
         // Ground
-        ctx.fillStyle = COLORS.ground;
+        ctx.fillStyle = groundGrad;
         ctx.fillRect(0, GROUND_Y, W, H - GROUND_Y);
-        ctx.fillStyle = COLORS.groundEdge;
+        ctx.fillStyle = '#7a5418';
         ctx.fillRect(0, GROUND_Y, W, 3);
 
         // Cities
         for (const c of state.cities) {
             if (!c.alive) {
-                // Rubble
                 ctx.fillStyle = '#2a1a0a';
-                ctx.fillRect(c.x - 18, GROUND_Y - 4, 36, 4);
+                ctx.beginPath();
+                ctx.moveTo(c.x - 20, GROUND_Y); ctx.lineTo(c.x - 12, GROUND_Y - 6); ctx.lineTo(c.x - 4, GROUND_Y - 3);
+                ctx.lineTo(c.x + 6, GROUND_Y - 8); ctx.lineTo(c.x + 20, GROUND_Y); ctx.fill();
                 continue;
             }
-            ctx.fillStyle = COLORS.city;
-            // Skyline
-            ctx.fillRect(c.x - 16, GROUND_Y - 18, 8, 18);
-            ctx.fillRect(c.x - 6, GROUND_Y - 24, 6, 24);
-            ctx.fillRect(c.x + 2, GROUND_Y - 14, 6, 14);
-            ctx.fillRect(c.x + 10, GROUND_Y - 20, 6, 20);
-            // Windows
+            const bl = [[-16, 18, 8], [-6, 26, 7], [2, 15, 7], [10, 21, 7]];
+            ctx.shadowColor = COLORS.city; ctx.shadowBlur = 10;
+            for (const [ox, h, w] of bl) {
+                const g = ctx.createLinearGradient(0, GROUND_Y - h, 0, GROUND_Y);
+                g.addColorStop(0, '#9fe3ff'); g.addColorStop(1, '#2a8fbf');
+                ctx.fillStyle = g;
+                ctx.fillRect(c.x + ox, GROUND_Y - h, w, h);
+            }
+            ctx.shadowBlur = 0;
             ctx.fillStyle = COLORS.cityWindow;
-            ctx.fillRect(c.x - 14, GROUND_Y - 14, 2, 2);
-            ctx.fillRect(c.x - 4, GROUND_Y - 20, 2, 2);
-            ctx.fillRect(c.x - 4, GROUND_Y - 12, 2, 2);
-            ctx.fillRect(c.x + 4, GROUND_Y - 10, 2, 2);
-            ctx.fillRect(c.x + 12, GROUND_Y - 16, 2, 2);
-            ctx.fillRect(c.x + 12, GROUND_Y - 8, 2, 2);
+            for (const [ox, h, w] of bl) {
+                for (let wy = GROUND_Y - h + 4; wy < GROUND_Y - 3; wy += 6) {
+                    if (((wy + ox) & 3) !== 0) ctx.fillRect(c.x + ox + 2, wy, 2, 2);
+                }
+            }
         }
 
         // Batteries
         for (const b of state.batteries) {
             if (b.alive) {
-                ctx.fillStyle = COLORS.battery;
+                const g = ctx.createLinearGradient(0, b.y, 0, GROUND_Y);
+                g.addColorStop(0, '#ffe39a'); g.addColorStop(1, '#b8801a');
+                ctx.shadowColor = COLORS.battery; ctx.shadowBlur = 10;
+                ctx.fillStyle = g;
                 ctx.beginPath();
-                ctx.moveTo(b.x - 18, GROUND_Y);
+                ctx.moveTo(b.x - 20, GROUND_Y);
                 ctx.lineTo(b.x - 12, b.y);
                 ctx.lineTo(b.x + 12, b.y);
-                ctx.lineTo(b.x + 18, GROUND_Y);
+                ctx.lineTo(b.x + 20, GROUND_Y);
                 ctx.closePath();
                 ctx.fill();
-                // Ammo dots
+                ctx.shadowBlur = 0;
+                // barrel aiming at crosshair
+                const ang = Math.atan2(state.crosshair.y - b.y, state.crosshair.x - b.x);
+                ctx.strokeStyle = '#fff3c4'; ctx.lineWidth = 4; ctx.lineCap = 'round';
+                ctx.beginPath(); ctx.moveTo(b.x, b.y - 2); ctx.lineTo(b.x + Math.cos(ang) * 14, b.y - 2 + Math.sin(ang) * 14); ctx.stroke();
+                ctx.lineCap = 'butt';
                 ctx.fillStyle = '#fff';
                 for (let i = 0; i < b.ammo; i++) {
                     const ax = b.x - 8 + (i % 5) * 4;
-                    const ay = b.y - 4 + Math.floor(i / 5) * 4;
+                    const ay = b.y + 4 + Math.floor(i / 5) * 4;
                     ctx.fillRect(ax, ay, 3, 3);
                 }
             } else {
@@ -454,61 +492,81 @@
 
         // Enemy missile trails + heads
         for (const m of state.enemyMissiles) {
-            ctx.strokeStyle = m.isMirv ? COLORS.mirv : COLORS.enemyTrail;
-            ctx.lineWidth = 1.5;
-            ctx.beginPath();
-            for (let i = 0; i < m.trail.length; i++) {
-                const t = m.trail[i];
-                if (i === 0) ctx.moveTo(t.x, t.y);
-                else ctx.lineTo(t.x, t.y);
+            const col = m.isMirv ? COLORS.mirv : COLORS.enemyMissile;
+            if (m.trail.length > 1) {
+                const t0 = m.trail[0];
+                const g = ctx.createLinearGradient(t0.x, t0.y, m.x, m.y);
+                g.addColorStop(0, 'rgba(255,46,99,0)');
+                g.addColorStop(1, m.isMirv ? 'rgba(255,102,204,0.9)' : 'rgba(255,46,99,0.9)');
+                ctx.strokeStyle = g;
+                ctx.lineWidth = 2;
+                ctx.beginPath();
+                ctx.moveTo(t0.x, t0.y);
+                for (let i = 1; i < m.trail.length; i++) ctx.lineTo(m.trail[i].x, m.trail[i].y);
+                ctx.stroke();
             }
-            ctx.stroke();
-            ctx.fillStyle = m.isMirv ? COLORS.mirv : COLORS.enemyMissile;
-            ctx.fillRect(m.x - 2, m.y - 2, 4, 4);
+            ctx.shadowColor = col; ctx.shadowBlur = 12;
+            ctx.fillStyle = '#fff';
+            ctx.beginPath(); ctx.arc(m.x, m.y, 2.6, 0, Math.PI * 2); ctx.fill();
+            ctx.shadowBlur = 0;
         }
 
         // Player missile trails + heads
         for (const m of state.playerMissiles) {
-            ctx.strokeStyle = COLORS.playerTrail;
-            ctx.lineWidth = 1.5;
-            ctx.beginPath();
-            for (let i = 0; i < m.trail.length; i++) {
-                const t = m.trail[i];
-                if (i === 0) ctx.moveTo(t.x, t.y);
-                else ctx.lineTo(t.x, t.y);
+            if (m.trail.length > 1) {
+                const t0 = m.trail[0];
+                const g = ctx.createLinearGradient(t0.x, t0.y, m.x, m.y);
+                g.addColorStop(0, 'rgba(54,227,164,0)');
+                g.addColorStop(1, 'rgba(54,227,164,0.95)');
+                ctx.strokeStyle = g;
+                ctx.lineWidth = 2;
+                ctx.beginPath();
+                ctx.moveTo(t0.x, t0.y);
+                for (let i = 1; i < m.trail.length; i++) ctx.lineTo(m.trail[i].x, m.trail[i].y);
+                ctx.stroke();
             }
+            ctx.shadowColor = COLORS.playerMissile; ctx.shadowBlur = 12;
+            ctx.fillStyle = '#d6fff0';
+            ctx.beginPath(); ctx.arc(m.x, m.y, 2.6, 0, Math.PI * 2); ctx.fill();
+            ctx.shadowBlur = 0;
+            // target marker
+            ctx.strokeStyle = 'rgba(54,227,164,0.55)'; ctx.lineWidth = 1.5;
+            ctx.beginPath();
+            ctx.moveTo(m.tx - 4, m.ty - 4); ctx.lineTo(m.tx + 4, m.ty + 4);
+            ctx.moveTo(m.tx + 4, m.ty - 4); ctx.lineTo(m.tx - 4, m.ty + 4);
             ctx.stroke();
-            ctx.fillStyle = COLORS.playerMissile;
-            ctx.fillRect(m.x - 2, m.y - 2, 4, 4);
         }
 
-        // Explosions
+        // Explosions (radial fireballs)
         for (const e of state.explosions) {
             const k = e.age / e.life;
-            ctx.globalAlpha = 1 - k;
-            const colors = COLORS.explosion;
-            for (let i = 0; i < 3; i++) {
-                ctx.fillStyle = colors[i];
-                ctx.beginPath();
-                ctx.arc(e.x, e.y, e.r * (1 - i * 0.3), 0, Math.PI * 2);
-                ctx.fill();
-            }
+            if (e.r <= 0.5) continue;
+            const g = ctx.createRadialGradient(e.x, e.y, 0, e.x, e.y, e.r);
+            g.addColorStop(0, `rgba(255,255,255,${0.95 * (1 - k)})`);
+            g.addColorStop(0.35, `rgba(255,208,107,${0.9 * (1 - k)})`);
+            g.addColorStop(0.7, `rgba(255,122,60,${0.7 * (1 - k)})`);
+            g.addColorStop(1, 'rgba(255,46,99,0)');
+            ctx.fillStyle = g;
+            ctx.beginPath();
+            ctx.arc(e.x, e.y, e.r, 0, Math.PI * 2);
+            ctx.fill();
         }
-        ctx.globalAlpha = 1;
 
         // Crosshair
         ctx.strokeStyle = COLORS.crosshair;
-        ctx.lineWidth = 1.5;
+        ctx.fillStyle = COLORS.crosshair;
+        ctx.shadowColor = COLORS.crosshair; ctx.shadowBlur = 8;
+        ctx.lineWidth = 1.8;
         const c = state.crosshair;
         ctx.beginPath();
-        ctx.moveTo(c.x - 10, c.y); ctx.lineTo(c.x - 4, c.y);
-        ctx.moveTo(c.x + 4, c.y); ctx.lineTo(c.x + 10, c.y);
-        ctx.moveTo(c.x, c.y - 10); ctx.lineTo(c.x, c.y - 4);
-        ctx.moveTo(c.x, c.y + 4); ctx.lineTo(c.x, c.y + 10);
+        ctx.moveTo(c.x - 12, c.y); ctx.lineTo(c.x - 4, c.y);
+        ctx.moveTo(c.x + 4, c.y); ctx.lineTo(c.x + 12, c.y);
+        ctx.moveTo(c.x, c.y - 12); ctx.lineTo(c.x, c.y - 4);
+        ctx.moveTo(c.x, c.y + 4); ctx.lineTo(c.x, c.y + 12);
         ctx.stroke();
-        ctx.beginPath();
-        ctx.arc(c.x, c.y, 2, 0, Math.PI * 2);
-        ctx.fill();
+        ctx.beginPath(); ctx.arc(c.x, c.y, 8, 0, Math.PI * 2); ctx.globalAlpha = 0.4; ctx.stroke(); ctx.globalAlpha = 1;
+        ctx.beginPath(); ctx.arc(c.x, c.y, 1.8, 0, Math.PI * 2); ctx.fill();
+        ctx.shadowBlur = 0;
 
         // Chain indicator
         if (state.chainCount > 1) {
@@ -523,12 +581,14 @@
     function loop(now) {
         const dt = Math.min(0.05, (now - last) / 1000);
         last = now;
-        if (state.running && !state.paused && !state.gameover) step(dt);
+        if (state.running && !state.paused && !state.gameover) { step(dt); updateHud(); }
+        else state.animTime += dt;
         render();
         requestAnimationFrame(loop);
     }
 
     // ---------- Input ----------
+    cv.style.cursor = 'none';
     cv.addEventListener('mousemove', (e) => {
         const r = cv.getBoundingClientRect();
         state.crosshair.x = (e.clientX - r.left) * (W / r.width);
@@ -564,6 +624,7 @@
         if (e.key === 'a' || e.key === 'A') fireMissile(state.crosshair.x, state.crosshair.y, 0);
         else if (e.key === 's' || e.key === 'S') fireMissile(state.crosshair.x, state.crosshair.y, 1);
         else if (e.key === 'd' || e.key === 'D') fireMissile(state.crosshair.x, state.crosshair.y, 2);
+        else if (e.key === ' ') { e.preventDefault(); fireMissile(state.crosshair.x, state.crosshair.y); }
         else if (e.key === 'p' || e.key === 'P' || e.key === 'Escape') togglePause();
         else if (e.key === 'r' || e.key === 'R') restart();
     });
@@ -592,6 +653,7 @@
         if (!state.paused) last = performance.now();
     }
     function restart() {
+        ui.oTitle.classList.add('hidden');
         ui.oOver.classList.add('hidden');
         ui.oPause.classList.add('hidden');
         ui.oWave.classList.add('hidden');
